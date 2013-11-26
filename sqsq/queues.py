@@ -74,9 +74,9 @@ class Queue(object):
         """
         self._connection.delete_queue(self.queue)
 
-    def enqueue(self, callable, *args, **kwargs):
+    def add_job(self, callable, *args, **kwargs):
         """
-        Enqueue the specified callable, with the specified arguments.
+        Add a new job to the queue.
 
         This will serialize the desired code, and dump it into the SQS queue.
 

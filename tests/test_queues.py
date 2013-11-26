@@ -35,12 +35,12 @@ class TestQueue:
 
         assert not connect_to_region('us-east-1').get_queue(sid)
 
-    def test_enqueue(self):
+    def test_add_job(self):
         sid = uuid4().hex
         q = Queue(sid)
 
-        q.enqueue(test_job, 'there')
-        q.enqueue(test_job, arg1='test', arg2='test')
+        q.add_job(test_job, 'there')
+        q.add_job(test_job, arg1='test', arg2='test')
         sleep(10)
 
         assert len(q.messages) == 2
