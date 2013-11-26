@@ -24,7 +24,7 @@ class TestQueue:
         q = Queue(sid)
 
         assert isinstance(q.queue, SQSQueue)
-        q._connection.delete_queue(q.queue)
+        q.delete()
 
     def test_delete_queue(self):
         sid = uuid4().hex
@@ -44,4 +44,4 @@ class TestQueue:
         sleep(10)
 
         assert len(q.messages) == 2
-        q._connection.delete_queue(q.queue)
+        q.delete()
