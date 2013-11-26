@@ -26,6 +26,15 @@ class TestQueue:
         assert isinstance(q.queue, SQSQueue)
         q._connection.delete_queue(q.queue)
 
+    def test_delete_queue(self):
+        sid = uuid4().hex
+        q = Queue(sid)
+
+        assert isinstance(q.queue, SQSQueue)
+        q.delete()
+
+        assert not connect_to_region('us-east-1').get_queue(sid)
+
     def test_enqueue(self):
         sid = uuid4().hex
         q = Queue(sid)
