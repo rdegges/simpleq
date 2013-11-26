@@ -94,10 +94,10 @@ class Queue(object):
         self.queue.write(message)
 
     @property
-    def messages(self):
+    def jobs(self):
         """
-        Return an iterator that allows the client to iterate through all
-        existing messages in the cheapest, and quickest possible way.
+        Return a list of existing jobs in the cheapest and quickest possible
+        way.
 
         By default we will:
 

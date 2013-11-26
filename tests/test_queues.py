@@ -43,5 +43,5 @@ class TestQueue:
         q.add_job(test_job, arg1='test', arg2='test')
         sleep(10)
 
-        assert len(q.messages) == 2
+        assert len(q.jobs) == 2
         q.delete()
