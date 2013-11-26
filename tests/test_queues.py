@@ -18,3 +18,4 @@ class TestQueue:
         q = Queue(sid)
 
         assert isinstance(q.queue, SQSQueue)
+        q._connection.delete_queue(q.queue)
