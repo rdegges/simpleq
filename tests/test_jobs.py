@@ -30,7 +30,3 @@ class TestJob:
         job.run()
 
         assert isinstance(job.exception, ZeroDivisionError)
-
-    def test_serialize(self):
-        job = Job(random_job)
-        assert isinstance(job.serialize(), str)
