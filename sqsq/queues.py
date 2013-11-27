@@ -83,6 +83,14 @@ class Queue(object):
         """
         self.queue.write(job._message)
 
+    def remove_job(self, job):
+        """
+        Remove a job from the queue.
+
+        :param obj job: The Job to remove.
+        """
+        self.queue.delete_message(job._message)
+
     @property
     def jobs(self):
         """
