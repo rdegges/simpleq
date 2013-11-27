@@ -1,4 +1,7 @@
+from cPickle import dumps
 from time import sleep
+
+from boto.sqs.message import Message
 
 from sqsq.jobs import Job
 
@@ -18,6 +21,16 @@ class TestJob:
     def test_create_job(self):
         job = Job(random_job, 'hi', arg2='there')
         assert isinstance(job, Job)
+
+    def test_create_job_from_message(self):
+        message = Message(body=dumps({
+            'callable': random_job,
+            'args': (),
+            'kwargs': {},
+        }))
+
+        job = Job.from_message(message)
+        assert message == job._message
 
     def test_run(self):
         job = Job(random_job, 'hi', arg2='there')
