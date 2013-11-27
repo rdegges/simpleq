@@ -5,4 +5,4 @@ python:
   - "3.2"
   - "3.3"
 install: python setup.py develop
-script: py.test
+script: py.test --cov sqsq
