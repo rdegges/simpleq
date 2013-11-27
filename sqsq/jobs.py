@@ -1,21 +1,45 @@
-from cPickle import dumps
+from cPickle import dumps, loads
 from datetime import datetime
 from uuid import uuid4
+
+from boto.sqs.message import Message
 
 
 class Job(object):
     """An abstraction for a single unit of work (a job!)."""
 
     def __init__(self, callable, *args, **kwargs):
-        """Create a new Job,"""
+        """
+        Create a new Job,
+
+        :param obj callable: [optional] A callable to run.
+        """
         self.start_time = None
         self.stop_time = None
         self.run_time = None
+        self.exception = None
+        self.result = None
         self._callable = callable
         self._args = args
         self._kwargs = kwargs
-        self.exception = None
-        self.result = None
+        self._message = Message(body=dumps({
+            'callable': self._callable,
+            'args': self._args,
+            'kwargs': self._kwargs,
+        }))
+
+    @classmethod
+    def from_message(cls, message):
+        """
+        Create a new Job, given a boto Message.
+
+        :param obj message: The boto Message object to use.
+        """
+        data = loads(message.get_body())
+        job = cls(data['callable'], *data['args'], **data['kwargs'])
+        job._message = message
+
+        return job
 
     def run(self):
         """Run this job."""
