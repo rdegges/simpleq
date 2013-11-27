@@ -15,7 +15,7 @@ setup(
     include_package_data = True,
 
     # Package dependencies:
-    install_requires = ['pytest>=2.4.2'],
+    install_requires = ['pytest>=2.4.2', 'pytest-cov>=1.6'],
 
     # Metadata for PyPI:
     author = 'Randall Degges',
