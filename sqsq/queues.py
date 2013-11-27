@@ -81,9 +81,7 @@ class Queue(object):
 
         :param obj job: The Job to queue.
         """
-        message = Message()
-        message.set_body(job.serialize())
-        self.queue.write(message)
+        self.queue.write(job._message)
 
     @property
     def jobs(self):
