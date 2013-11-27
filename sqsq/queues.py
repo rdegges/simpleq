@@ -113,7 +113,6 @@ class Queue(object):
             num_messages = self.BATCH_SIZE,
             wait_time_seconds = self.WAIT_SECONDS,
         ):
-            data = dict(loads(message.get_body()))
-            jobs.append(Job(data['callable'], *data['args'], **data['kwargs']))
+            jobs.append(Job.from_message(message))
 
         return jobs
