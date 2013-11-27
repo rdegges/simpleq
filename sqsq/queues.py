@@ -1,7 +1,9 @@
-from cPickle import dumps
+from cPickle import dumps, loads
 
 from boto.sqs import connect_to_region
 from boto.sqs.message import Message
+
+from sqsq.jobs import Job
 
 
 class Queue(object):
@@ -74,23 +76,16 @@ class Queue(object):
         """
         self._connection.delete_queue(self.queue)
 
-    def add_job(self, callable, *args, **kwargs):
+    def add_job(self, job):
         """
         Add a new job to the queue.
 
         This will serialize the desired code, and dump it into the SQS queue.
 
-        :param obj callable: A callable function, object, etc.
-        :param list args: A list of callable arguments.
-        :param dict kwargs: A dictionary of keyword arguments.
+        :param obj job: The Job to queue.
         """
         message = Message()
-        message.set_body(dumps({
-            'callable': callable,
-            'args': args,
-            'kwargs': kwargs,
-        }))
-
+        message.set_body(job.serialize())
         self.queue.write(message)
 
     @property
@@ -109,7 +104,13 @@ class Queue(object):
               sent to us (if none are in the queue already).  This way, we'll
               reduce our total request count, and spend less dollars.
         """
-        return self.queue.get_messages(
+        jobs = []
+
+        for message in self.queue.get_messages(
             num_messages = self.BATCH_SIZE,
             wait_time_seconds = self.WAIT_SECONDS,
-        )
+        ):
+            data = dict(loads(message.get_body()))
+            jobs.append(Job(data['callable'], *data['args'], **data['kwargs']))
+
+        return jobs
