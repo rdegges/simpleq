@@ -3,6 +3,8 @@ from uuid import uuid4
 
 from boto.sqs import connect_to_region
 from boto.sqs.queue import Queue as SQSQueue
+
+from sqsq.jobs import Job
 from sqsq.queues import Queue
 
 
@@ -39,8 +41,8 @@ class TestQueue:
         sid = uuid4().hex
         q = Queue(sid)
 
-        q.add_job(test_job, 'there')
-        q.add_job(test_job, arg1='test', arg2='test')
+        q.add_job(Job(test_job, 'there'))
+        q.add_job(Job(test_job, arg1='test', arg2='test'))
         sleep(10)
 
         assert len(q.jobs) == 2
