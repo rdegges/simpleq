@@ -1,3 +1,4 @@
+from cPickle import dumps
 from datetime import datetime
 from uuid import uuid4
 
@@ -31,3 +32,16 @@ class Job(object):
         self.stop_time = datetime.utcnow()
         self.run_time = (self.stop_time - self.start_time).total_seconds()
         print 'Finished job:', jid, 'at:', self.stop_time.isoformat(), 'in:', self.run_time, 'seconds'
+
+    def serialize(self):
+        """
+        Return a pickle serialized version of this job.
+
+        :rtype: string
+        :returns: This job, pickled.
+        """
+        return dumps({
+            'callable': self._callable,
+            'args': self._args,
+            'kwargs': self._kwargs,
+        })
