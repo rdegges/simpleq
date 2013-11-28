@@ -1,3 +1,6 @@
+from gevent.pool import Pool
+
+
 class Worker(object):
     """
     A simple queue worker.
@@ -19,7 +22,10 @@ class Worker(object):
 
         Once started, this will run forever.
         """
+        pool = Pool(1000)
         while True:
             for queue in self.queues:
                 for job in queue.jobs:
-                    job.run()
+                    pool.spawn(job.run)
+
+            pool.join()
