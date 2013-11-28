@@ -28,6 +28,12 @@ class Job(object):
             'kwargs': self._kwargs,
         }))
 
+    def __repr__(self):
+        """Print a human-friendly object representation."""
+        return '<Job({"callable": "%s"})>' % (
+            self._callable.__name__,
+        )
+
     @classmethod
     def from_message(cls, message):
         """
