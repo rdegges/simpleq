@@ -16,6 +16,10 @@ class Worker(object):
         """
         self.queues = queues
 
+    def __repr__(self):
+        """Print a human-friendly object representation."""
+        return '<Worker({"queues": %r})>' % self.queues
+
     def work(self):
         """
         Monitor all queues and execute jobs.
