@@ -47,6 +47,13 @@ class Queue(object):
         self._connection = connection or connect_to_region('us-east-1')
         self._queue = None
 
+    def __repr__(self):
+        """Print a human-friendly object representation."""
+        return '<Queue({"name": "%s", "region": "%s"})>' % (
+            self.name,
+            self._connection.region.name,
+        )
+
     @property
     def queue(self):
         """
