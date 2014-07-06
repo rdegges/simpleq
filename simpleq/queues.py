@@ -63,7 +63,7 @@ class Queue(object):
         """Print a human-friendly object representation."""
         return '<Queue({"name": "%s", "region": "%s"})>' % (
             self.name,
-            self._connection.region.name,
+            self.connection.region.name,
         )
 
     @property
