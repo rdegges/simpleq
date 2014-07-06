@@ -24,7 +24,7 @@ class TestJob(TestCase):
 
     def test_create_job(self):
         job = Job(random_job, 'hi', arg2='there')
-        assert isinstance(job, Job)
+        self.assertIsInstance(job, Job)
 
     def test_create_job_from_message(self):
         message = Message(body=dumps({
@@ -34,16 +34,16 @@ class TestJob(TestCase):
         }))
 
         job = Job.from_message(message)
-        assert message == job._message
+        self.assertEqual(message, job.message)
 
     def test_run(self):
         job = Job(random_job, 'hi', arg2='there')
         job.run()
 
-        assert job.run_time >= 1
-        assert job.result == 'yo!'
+        self.assertTrue(job.run_time >= 1)
+        self.assertEqual(job.result, 'yo!')
 
         job = Job(bad_job)
         job.run()
 
-        assert isinstance(job.exception, ZeroDivisionError)
+        self.assertIsInstance(job.exception, ZeroDivisionError)
