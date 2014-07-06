@@ -1,6 +1,26 @@
-from os.path import abspath, dirname, join, normpath
+"""Package setup information."""
 
-from setuptools import setup
+
+from subprocess import call
+
+from setuptools import Command, setup
+
+
+class RunTests(Command):
+    """Run all tests."""
+    description = 'run tests'
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        """Run all tests!"""
+        errno = call(['py.test'])
+        raise SystemExit(errno)
 
 
 setup(
@@ -15,16 +35,35 @@ setup(
     include_package_data = True,
 
     # Package dependencies:
-    install_requires = ['pytest>=2.4.2', 'pytest-cov>=1.6'],
+    install_requires = ['boto>=2.30.0'],
 
     # Metadata for PyPI:
     author = 'Randall Degges',
-    author_email = 'rdegges@gmail.com',
+    author_email = 'r@rdegges.com',
     license = 'UNLICENSE',
-    url = 'https://github.com/rdegges/sqsq',
+    url = 'https://github.com/rdegges/simpleq',
     keywords = 'SQS AWS amazon web services queue worker tasks job',
-    description = 'A simple, scalable, SQS queue.',
-    long_description = open(normpath(join(dirname(abspath(__file__)),
-        'README.md'))).read()
+    description = 'A simple, infinitely scalable, SQS based queue.',
+    long_description = 'A simple, infinitely scalable, SQS based queue.',
+
+    # Classifiers:
+    platforms = 'any',
+    classifiers = [
+        'Environment :: Web Environment',
+        'Intended Audience :: Developers',
+        'License :: Public Domain',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python',
+        'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+        'Topic :: Database',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: Implementation :: PyPy',
+    ],
+
+    # Test helper:
+    cmdclass = {'test': RunTests},
 
 )
