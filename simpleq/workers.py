@@ -1,3 +1,6 @@
+"""Our worker implementation."""
+
+
 from gevent.pool import Pool
 
 
