@@ -2,6 +2,7 @@
 
 
 from time import sleep
+from unittest import TestCase
 from uuid import uuid4
 
 from boto.sqs import connect_to_region
@@ -16,26 +17,26 @@ def test_job(arg1=None, arg2=None):
     pass
 
 
-class TestQueue:
+class TestQueue(TestCase):
 
     def test_lazy_create_queue(self):
         sid = uuid4().hex
         Queue(sid)
 
-        assert not connect_to_region('us-east-1').get_queue(sid)
+        self.assertNotTrue(connect_to_region('us-east-1').get_queue(sid))
 
     def test_create_queue(self):
         sid = uuid4().hex
         q = Queue(sid)
 
-        assert isinstance(q.queue, SQSQueue)
+        self.assertIsInstance(q.queue, SQSQueue)
         q.delete()
 
     def test_delete_queue(self):
         sid = uuid4().hex
         q = Queue(sid)
 
-        assert isinstance(q.queue, SQSQueue)
+        self.assertIsInstance(q.queue, SQSQueue)
         q.delete()
 
         assert not connect_to_region('us-east-1').get_queue(sid)
@@ -48,7 +49,7 @@ class TestQueue:
         q.add_job(Job(test_job, arg1='test', arg2='test'))
         sleep(10)
 
-        assert len(q.jobs) == 2
+        self.assertEqual(len(q.jobs), 2)
         q.delete()
 
     def test_remove_job(self):
@@ -64,5 +65,5 @@ class TestQueue:
 
         sleep(10)
 
-        assert len(q.jobs) == 0
+        self.assertEqual(len(q.jobs), 0)
         q.delete()
