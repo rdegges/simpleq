@@ -2,6 +2,8 @@
 
 A simple, infinitely scalable, SQS based queue.
 
+[![Build Status](https://travis-ci.org/rdegges/simpleq.svg?branch=master)](https://travis-ci.org/rdegges/simpleq)
+
 ![SimpleQ Logo](https://github.com/rdegges/simpleq/raw/master/assets/happy-snake.jpg)
 
 
