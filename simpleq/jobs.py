@@ -1,5 +1,8 @@
-from pickle import dumps, loads
+"""This module holds our job abstractions."""
+
+
 from datetime import datetime
+from pickle import dumps, loads
 
 from boto.sqs.message import Message
 
@@ -34,7 +37,7 @@ class Job(object):
         )
 
     @classmethod
-    def frommessage(cls, message):
+    def from_message(cls, message):
         """
         Create a new Job, given a boto Message.
 
