@@ -86,7 +86,8 @@ class Queue(object):
         return self._queue
 
     def delete(self):
-        """Delete this SQS queue.
+        """
+        Delete this SQS queue.
 
         This will remove all jobs in the queue, regardless of whether or not
         they're currently being processed.  This data cannot be recovered.
