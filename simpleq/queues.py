@@ -125,8 +125,8 @@ class Queue(object):
               reduce the cost of running the service, as less requests equals
               less dollars.
 
-            - Wait for as long as possible (20 seconds) for a message to be
-              sent to us (if none are in the queue already).  This way, we'll
+            - Wait for as long as possible (*20 seconds*) for a message to be
+              sent to us (*if none are in the queue already*).  This way, we'll
               reduce our total request count, and spend less dollars.
         """
         jobs = []
