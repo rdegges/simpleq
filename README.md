@@ -1,5 +1,5 @@
-# sqsq
+# SimpleQ
 
-A simple, scalable, SQS queue.
+A simple, infinitely scalable, SQS based queue.
 
-![SQSQ Logo](https://github.com/rdegges/sqsq/raw/master/assets/happy-snake.jpg)
+![SimpleQ Logo](https://github.com/rdegges/simpleq/raw/master/assets/happy-snake.jpg)
