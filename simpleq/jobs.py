@@ -68,10 +68,16 @@ class Job(object):
         except Exception, e:
             self.exception = e
 
-        self.stop_time = datetime.utcnow()
-        self.run_time = (self.stop_time - self.start_time).total_seconds()
-        self.log('Finished job %s at %s in %s seconds.' % (
-            self.callable.__name__,
-            self.stop_time.isoformat(),
-            self.run_time,
-        ))
+        if not self.exception:
+            self.stop_time = datetime.utcnow()
+            self.run_time = (self.stop_time - self.start_time).total_seconds()
+            self.log('Finished job %s at %s in %s seconds.' % (
+                self.callable.__name__,
+                self.stop_time.isoformat(),
+                self.run_time,
+            ))
+        else:
+            self.log('Job %s failed to run: %s' % (
+                self.callable.__name__,
+                self.exception,
+            ))
