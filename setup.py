@@ -26,9 +26,9 @@ class RunTests(Command):
 setup(
 
     # Basic package information:
-    name = 'sqsq',
+    name = 'simpleq',
     version = '0.0.1',
-    py_modules = ['sqsq'],
+    py_modules = ['simpleq'],
 
     # Packaging options:
     zip_safe = False,
