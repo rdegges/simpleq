@@ -7,8 +7,8 @@ from uuid import uuid4
 from boto.sqs import connect_to_region
 from boto.sqs.queue import Queue as SQSQueue
 
-from sqsq.jobs import Job
-from sqsq.queues import Queue
+from simpleq.jobs import Job
+from simpleq.queues import Queue
 
 
 def test_job(arg1=None, arg2=None):
