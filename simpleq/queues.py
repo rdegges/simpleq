@@ -46,7 +46,11 @@ class Queue(object):
 
     def __init__(self, name, connection=None):
         """
-        Initialize a new connection.
+        Initialize an SQS queue.
+
+        This will create a new boto SQS connection in the background, which will
+        be used for all future queue requests.  This will speed up communication
+        with SQS by taking advantage of boto's connection pooling functionality.
 
         :param str name: The name of the queue to use.
         :param obj connection: [optional] Either a
