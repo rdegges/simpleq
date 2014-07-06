@@ -1,3 +1,6 @@
+"""This module holds our queue abstractions."""
+
+
 from boto.sqs import connect_to_region
 
 from simpleq.jobs import Job
