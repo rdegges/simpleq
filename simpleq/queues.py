@@ -98,19 +98,20 @@ class Queue(object):
         """
         Add a new job to the queue.
 
-        This will serialize the desired code, and dump it into the SQS queue.
+        This will serialize the desired code, and dump it into this SQS queue
+        to be processed.
 
-        :param obj job: The Job to queue.
+        :param obj job: The Job to enqueue.
         """
-        self.queue.write(job._message)
+        self.queue.write(job.message)
 
     def remove_job(self, job):
         """
         Remove a job from the queue.
 
-        :param obj job: The Job to remove.
+        :param obj job: The Job to dequeue.
         """
-        self.queue.delete_message(job._message)
+        self.queue.delete_message(job.message)
 
     @property
     def jobs(self):
