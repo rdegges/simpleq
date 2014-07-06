@@ -1,9 +1,13 @@
-from cPickle import dumps
+"""All of our job tests."""
+
+
+from pickle import dumps
 from time import sleep
+from unittest import TestCase
 
 from boto.sqs.message import Message
 
-from sqsq.jobs import Job
+from simpleq.jobs import Job
 
 
 def random_job(arg1=None, arg2=None):
@@ -16,7 +20,7 @@ def bad_job():
     return 1 / 0
 
 
-class TestJob:
+class TestJob(TestCase):
 
     def test_create_job(self):
         job = Job(random_job, 'hi', arg2='there')
