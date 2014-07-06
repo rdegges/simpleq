@@ -13,27 +13,33 @@ class Queue(object):
     There are two ways to create a Queue.
 
     1. Specify only a queue name, and connect to the default Amazon SQS region
-       (us-east-1).  This will only work if you have your AWS credentials set
-       appropriately in your environment (`AWS_ACCESS_KEY_ID` and
-       `AWS_SECRET_ACCESS_KEY`).  For example::
+       (*us-east-1*).  This will only work if you have your AWS credentials set
+       appropriately in your environment (*``AWS_ACCESS_KEY_ID`` and
+       ``AWS_SECRET_ACCESS_KEY``*).  To set your environment variables, you can
+       use the shell command ``export``::
 
-       from sqsq.queues import Queue
+            $ export AWS_ACCESS_KEY_ID=xxx
+            $ export AWS_SECRET_ACCESS_KEY=xxx
 
-       myqueue = Queue('myqueue')
+       You can then create a queue as follows::
 
-    2. Specify a queue name, and a custom boto SQS connection.  For example:
+            from simpleq.queues import Queue
 
-       from boto.sqs import connect_to_region
-       from sqsq.queues import Queue
+            myqueue = Queue('myqueue')
 
-       myqueue = Queue(
-           'myqueue',
-           connection = connect_to_region(
-               'us-west-1',
-               aws_access_key_id = 'blah',
-               aws_secret_access_key = 'blah'
-           )
-       )
+    2. Specify a queue name, and a custom boto SQS connection.  For example::
+
+            from boto.sqs import connect_to_region
+            from simpleq.queues import Queue
+
+            myqueue = Queue(
+                'myqueue',
+                connection = connect_to_region(
+                    'us-west-1',
+                    aws_access_key_id = 'blah',
+                    aws_secret_access_key = 'blah'
+                )
+            )
     """
     BATCH_SIZE = 10
     WAIT_SECONDS = 20
