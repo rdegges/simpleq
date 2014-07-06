@@ -53,8 +53,7 @@ class Queue(object):
         with SQS by taking advantage of boto's connection pooling functionality.
 
         :param str name: The name of the queue to use.
-        :param obj connection: [optional] Either a
-            boto.sqs.connection.SQSConnection object, or None.
+        :param obj connection: [optional] Either a boto connection object, or None.
         """
         self.name = name
         self._connection = connection or connect_to_region('us-east-1')
