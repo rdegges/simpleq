@@ -57,7 +57,7 @@ class Queue(object):
         """
         self.name = name
         self.connection = connection or connect_to_region('us-east-1')
-        self.queue = None
+        self._queue = None
 
     def __repr__(self):
         """Print a human-friendly object representation."""
@@ -69,18 +69,19 @@ class Queue(object):
     @property
     def queue(self):
         """
-        Handles lazy queue connections.
+        Return the underlying SQS queue object from boto.
 
-        If the specified queue doesn't exist, it will be created automatically.
+        This will either lazily create (*or retrieve*) the queue from SQS by
+        name.
 
         :returns: The SQS queue object.
         """
         if self._queue:
             return self._queue
 
-        self._queue = self._connection.get_queue(self.name)
+        self._queue = self.connection.get_queue(self.name)
         if not self._queue:
-            self._queue = self._connection.create_queue(self.name)
+            self._queue = self.connection.create_queue(self.name)
 
         return self._queue
 
@@ -90,7 +91,7 @@ class Queue(object):
         This will remove all jobs in the queue, regardless of whether or not
         they're currently being processed.  This data cannot be recovered.
         """
-        self._connection.delete_queue(self.queue)
+        self.connection.delete_queue(self.queue)
 
     def add_job(self, job):
         """
