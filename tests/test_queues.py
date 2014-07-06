@@ -23,7 +23,7 @@ class TestQueue(TestCase):
         sid = uuid4().hex
         Queue(sid)
 
-        self.assertNotTrue(connect_to_region('us-east-1').get_queue(sid))
+        self.assertFalse(connect_to_region('us-east-1').get_queue(sid))
 
     def test_create_queue(self):
         sid = uuid4().hex
