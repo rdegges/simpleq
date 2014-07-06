@@ -56,8 +56,8 @@ class Queue(object):
         :param obj connection: [optional] Either a boto connection object, or None.
         """
         self.name = name
-        self._connection = connection or connect_to_region('us-east-1')
-        self._queue = None
+        self.connection = connection or connect_to_region('us-east-1')
+        self.queue = None
 
     def __repr__(self):
         """Print a human-friendly object representation."""
