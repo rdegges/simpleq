@@ -1,6 +1,6 @@
 from boto.sqs import connect_to_region
 
-from sqsq.jobs import Job
+from simpleq.jobs import Job
 
 
 class Queue(object):

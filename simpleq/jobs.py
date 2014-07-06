@@ -1,6 +1,5 @@
-from cPickle import dumps, loads
+from pickle import dumps, loads
 from datetime import datetime
-from uuid import uuid4
 
 from boto.sqs.message import Message
 
@@ -19,23 +18,23 @@ class Job(object):
         self.run_time = None
         self.exception = None
         self.result = None
-        self._callable = callable
-        self._args = args
-        self._kwargs = kwargs
-        self._message = Message(body=dumps({
-            'callable': self._callable,
-            'args': self._args,
-            'kwargs': self._kwargs,
+        self.callable = callable
+        self.args = args
+        self.kwargs = kwargs
+        self.message = Message(body=dumps({
+            'callable': self.callable,
+            'args': self.args,
+            'kwargs': self.kwargs,
         }))
 
     def __repr__(self):
         """Print a human-friendly object representation."""
         return '<Job({"callable": "%s"})>' % (
-            self._callable.__name__,
+            self.callable.__name__,
         )
 
     @classmethod
-    def from_message(cls, message):
+    def frommessage(cls, message):
         """
         Create a new Job, given a boto Message.
 
@@ -43,22 +42,33 @@ class Job(object):
         """
         data = loads(message.get_body())
         job = cls(data['callable'], *data['args'], **data['kwargs'])
-        job._message = message
+        job.message = message
 
         return job
+
+    def log(self, message):
+        """
+        Write the given message to standard out (STDOUT).
+        """
+        print 'sqsq: %s' % message
 
     def run(self):
         """Run this job."""
         self.start_time = datetime.utcnow()
-        jid = uuid4().hex
-
-        print 'Starting job:', jid, 'at:', self.start_time.isoformat()
+        self.log('Starting job %s at %s.' % (
+            self.callable.__name__,
+            self.start_time.isoformat(),
+        ))
 
         try:
-            self.result = self._callable(*self._args, **self._kwargs)
+            self.result = self.callable(*self.args, **self.kwargs)
         except Exception, e:
             self.exception = e
 
         self.stop_time = datetime.utcnow()
         self.run_time = (self.stop_time - self.start_time).total_seconds()
-        print 'Finished job:', jid, 'at:', self.stop_time.isoformat(), 'in:', self.run_time, 'seconds'
+        self.log('Finished job %s at %s in %s seconds.' % (
+            self.callable.__name__,
+            self.stop_time.isoformat(),
+            self.run_time,
+        ))
