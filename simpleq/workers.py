@@ -16,8 +16,10 @@ class Worker(object):
         Initialize a new worker.
 
         :param list queues: A list of queues to monitor.
-        :param int concurrency: The amount of green threads to use whiile
-            processing jobs.
+        :param int concurrency: The amount of jobs to process concurrently.
+            Depending on what type of concurrency is in use (*either gevent, or
+            multiprocessing*), this may correlate to either green threads or CPU
+            processes, respectively.
         """
         self.queues = queues
         self.concurrency = concurrency
@@ -33,6 +35,7 @@ class Worker(object):
         Once started, this will run forever.
         """
         pool = Pool(self.concurrency)
+
         while True:
             for queue in self.queues:
                 for job in queue.jobs:
