@@ -1,6 +1,9 @@
 """This module holds our queue abstractions."""
 
 
+from gevent import monkey
+monkey.patch_all()
+
 from boto.sqs import connect_to_region
 
 from simpleq.jobs import Job

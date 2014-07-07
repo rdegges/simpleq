@@ -1,6 +1,9 @@
 """This module holds our job abstractions."""
 
 
+from gevent import monkey
+monkey.patch_all()
+
 from datetime import datetime
 from pickle import dumps, loads
 
