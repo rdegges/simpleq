@@ -30,12 +30,13 @@ class TestWorker(TestCase):
         queue.add_job(Job(test_job, 'hi', 'there'))
 
         sleep(10)
-        self.assertEqual(len(queue.jobs), 1)
+
+        self.assertEqual(queue.num_jobs(), 1)
 
         worker = Worker([queue])
         worker.work(True)
 
         sleep(10)
 
-        self.assertEqual(len(queue.jobs), 0)
+        self.assertEqual(queue.num_jobs(), 0)
         queue.delete()

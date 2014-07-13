@@ -1,6 +1,7 @@
 """All of our queue tests."""
 
 
+from time import sleep
 from unittest import TestCase
 from uuid import uuid4
 
@@ -26,39 +27,43 @@ class TestQueue(TestCase):
 
     def test_create_queue(self):
         sid = uuid4().hex
-        q = Queue(sid)
+        queue = Queue(sid)
 
-        self.assertIsInstance(q.queue, SQSQueue)
-        q.delete()
+        self.assertIsInstance(queue.queue, SQSQueue)
+        queue.delete()
 
     def test_delete_queue(self):
         sid = uuid4().hex
-        q = Queue(sid)
+        queue = Queue(sid)
 
-        self.assertIsInstance(q.queue, SQSQueue)
-        q.delete()
+        self.assertIsInstance(queue.queue, SQSQueue)
+        queue.delete()
 
         assert not connect_to_region('us-east-1').get_queue(sid)
 
     def test_add_job(self):
         sid = uuid4().hex
-        q = Queue(sid)
+        queue = Queue(sid)
 
-        q.add_job(Job(test_job, 'there'))
-        q.add_job(Job(test_job, arg1='test', arg2='test'))
+        queue.add_job(Job(test_job, 'there'))
+        queue.add_job(Job(test_job, arg1='test', arg2='test'))
 
-        self.assertEqual(len(q.jobs), 2)
-        q.delete()
+        sleep(10)
+
+        self.assertEqual(queue.num_jobs(), 2)
+        queue.delete()
 
     def test_remove_job(self):
         sid = uuid4().hex
-        q = Queue(sid)
+        queue = Queue(sid)
 
-        q.add_job(Job(test_job, 'there'))
-        q.add_job(Job(test_job, arg1='test', arg2='test'))
+        queue.add_job(Job(test_job, 'there'))
+        queue.add_job(Job(test_job, arg1='test', arg2='test'))
 
-        for job in q.jobs:
-            q.remove_job(job)
+        for job in queue.jobs:
+            queue.remove_job(job)
 
-        self.assertEqual(len(q.jobs), 0)
-        q.delete()
+        sleep(10)
+
+        self.assertEqual(queue.num_jobs(), 0)
+        queue.delete()
