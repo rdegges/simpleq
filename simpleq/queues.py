@@ -85,7 +85,6 @@ class Queue(object):
 
         return self._queue
 
-    @property
     def num_jobs(self):
         """
         Return the amount of jobs currently in this SQS queue.
@@ -143,7 +142,7 @@ class Queue(object):
             This method is a generator which will continue to return results
             until this SQS queue is emptied.
         """
-        total_jobs = self.num_jobs
+        total_jobs = self.num_jobs()
 
         while total_jobs:
             for message in self.queue.get_messages(
@@ -152,4 +151,4 @@ class Queue(object):
             ):
                 yield Job.from_message(message)
 
-            total_jobs = self.num_jobs
+            total_jobs = self.num_jobs()
