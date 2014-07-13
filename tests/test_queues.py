@@ -1,7 +1,6 @@
 """All of our queue tests."""
 
 
-from time import sleep
 from unittest import TestCase
 from uuid import uuid4
 
@@ -47,7 +46,6 @@ class TestQueue(TestCase):
 
         q.add_job(Job(test_job, 'there'))
         q.add_job(Job(test_job, arg1='test', arg2='test'))
-        sleep(10)
 
         self.assertEqual(len(q.jobs), 2)
         q.delete()
@@ -58,12 +56,9 @@ class TestQueue(TestCase):
 
         q.add_job(Job(test_job, 'there'))
         q.add_job(Job(test_job, arg1='test', arg2='test'))
-        sleep(10)
 
         for job in q.jobs:
             q.remove_job(job)
-
-        sleep(10)
 
         self.assertEqual(len(q.jobs), 0)
         q.delete()
