@@ -129,7 +129,7 @@ class Queue(object):
     @property
     def jobs(self):
         """
-        Return a list of existing jobs in the cheapest and quickest possible
+        Iterate through all existing jobs in the cheapest and quickest possible
         way.
 
         By default we will:
@@ -141,13 +141,18 @@ class Queue(object):
             - Wait for as long as possible (*20 seconds*) for a message to be
               sent to us (*if none are in the queue already*).  This way, we'll
               reduce our total request count, and spend less dollars.
+
+        .. note::
+            This method is a generator which will continue to return results
+            until this SQS queue is emptied.
         """
-        jobs = []
+        total_jobs = self.num_jobs
 
-        for message in self.queue.get_messages(
-            num_messages = self.BATCH_SIZE,
-            wait_time_seconds = self.WAIT_SECONDS,
-        ):
-            jobs.append(Job.from_message(message))
+        while total_jobs:
+            for message in self.queue.get_messages(
+                num_messages = self.BATCH_SIZE,
+                wait_time_seconds = self.WAIT_SECONDS,
+            ):
+                yield Job.from_message(message)
 
-        return jobs
+            total_jobs = self.num_jobs
