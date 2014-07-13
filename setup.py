@@ -35,7 +35,7 @@ setup(
     include_package_data = True,
 
     # Package dependencies:
-    install_requires = ['boto>=2.30.0', 'gevent>=1.0.1'],
+    install_requires = ['boto>=2.30.0'],
 
     # Metadata for PyPI:
     author = 'Randall Degges',
