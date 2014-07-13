@@ -88,6 +88,16 @@ class Queue(object):
 
         return self._queue
 
+    @property
+    def num_jobs(self):
+        """
+        Return the amount of jobs currently in this SQS queue.
+
+        :rtype: int
+        :returns: The amount of jobs currently in this SQS queue.
+        """
+        return self.queue.count()
+
     def delete(self):
         """
         Delete this SQS queue.
