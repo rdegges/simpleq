@@ -1,6 +1,9 @@
 """Our worker implementation."""
 
 
+from time import sleep
+
+
 class Worker(object):
     """
     A simple queue worker.
@@ -25,7 +28,7 @@ class Worker(object):
         """Print a human-friendly object representation."""
         return '<Worker({"queues": %r})>' % self.queues
 
-    def work(self, burst=False):
+    def work(self, burst=False, wait_seconds=5):
         """
         Monitor all queues and execute jobs.
 
@@ -35,11 +38,12 @@ class Worker(object):
         :param bool burst: Should we quickly *burst* and finish all existing
             jobs then quit?
         """
-        done = False
-        while not done:
+        while True:
             for queue in self.queues:
                 for job in queue.jobs:
                     job.run()
                     queue.remove_job(job)
-
-            done = True if burst else False
+            
+            if burst:
+                break
+            sleep(wait_seconds)
