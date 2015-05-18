@@ -45,7 +45,6 @@ class Job(object):
         """
         data = loads(message.get_body())
         job = cls(data['callable'], *data['args'], **data['kwargs'])
-        job.message = message
 
         return job
 

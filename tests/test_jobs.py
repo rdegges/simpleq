@@ -34,7 +34,7 @@ class TestJob(TestCase):
         }))
 
         job = Job.from_message(message)
-        self.assertEqual(message, job.message)
+        self.assertEqual(message.get_body(), job.message.get_body())
 
     def test_run(self):
         job = Job(random_job, 'hi', arg2='there')
