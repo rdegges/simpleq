@@ -1,49 +1,53 @@
 """Our worker implementation."""
 
+from __future__ import annotations
 
 from time import sleep
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from simpleq.queues import Queue
 
 
-class Worker(object):
-    """
-    A simple queue worker.
+class Worker:
+    """A simple queue worker.
 
     This worker listens to one or more queues for jobs, then executes each job
     to complete the work.
     """
-    def __init__(self, queues, concurrency=10):
-        """
-        Initialize a new worker.
 
-        :param list queues: A list of queues to monitor.
-        :param int concurrency: The amount of jobs to process concurrently.
-            Depending on what type of concurrency is in use (*either gevent, or
-            multiprocessing*), this may correlate to either green threads or
-            CPU processes, respectively.
+    def __init__(self, queues: list[Queue], concurrency: int = 10) -> None:
+        """Initialize a new worker.
+
+        Args:
+            queues: A list of queues to monitor.
+            concurrency: The amount of jobs to process concurrently.
+                Depending on what type of concurrency is in use (either gevent, or
+                multiprocessing), this may correlate to either green threads or
+                CPU processes, respectively.
         """
         self.queues = queues
         self.concurrency = concurrency
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Print a human-friendly object representation."""
-        return '<Worker({"queues": %r})>' % self.queues
+        return f'<Worker({{"queues": {self.queues!r}}}))>'
 
-    def work(self, burst=False, wait_seconds=5):
-        """
-        Monitor all queues and execute jobs.
+    def work(self, burst: bool = False, wait_seconds: int = 5) -> None:
+        """Monitor all queues and execute jobs.
 
-        Once started, this will run forever (*unless the burst option is
-        True*).
+        Once started, this will run forever (unless the burst option is True).
 
-        :param bool burst: Should we quickly *burst* and finish all existing
-            jobs then quit?
+        Args:
+            burst: Should we quickly burst and finish all existing jobs then quit?
+            wait_seconds: Seconds to wait between polling iterations.
         """
         while True:
             for queue in self.queues:
-                for job in queue.jobs:
+                for job, message in queue.jobs:
                     job.run()
-                    queue.remove_job(job)
-            
+                    queue.remove_job(message)
+
             if burst:
                 break
             sleep(wait_seconds)
