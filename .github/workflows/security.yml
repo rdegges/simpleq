@@ -1,0 +1,32 @@
+name: Security
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "0 0 * * 0"
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: Install audit tools
+        run: uv pip install bandit pip-audit
+
+      - name: Bandit
+        run: uv run bandit -r simpleq
+
+      - name: pip-audit
+        run: uv run pip-audit

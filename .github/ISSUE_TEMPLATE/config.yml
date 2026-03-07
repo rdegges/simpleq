@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security reports
+    url: https://github.com/rdegges/simpleq/security
+    about: Please use the private security reporting path for vulnerabilities.

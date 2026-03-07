@@ -1,0 +1,34 @@
+services:
+  localstack:
+    image: localstack/localstack:4.4.0
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: sqs
+      DEBUG: 1
+      AWS_DEFAULT_REGION: us-east-1
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "awslocal sqs list-queues >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      SIMPLEQ_ENDPOINT_URL: http://localstack:4566
+      SIMPLEQ_ENV: development
+      LOCALSTACK_HOSTNAME: localstack
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      UV_PROJECT_ENVIRONMENT: /opt/simpleq/.venv
+    depends_on:
+      localstack:
+        condition: service_healthy
+    command: ["sleep", "infinity"]

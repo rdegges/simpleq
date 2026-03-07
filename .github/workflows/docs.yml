@@ -1,0 +1,44 @@
+name: Docs
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync docs dependencies
+        run: uv sync --extra docs
+
+      - name: Build docs
+        run: uv run mkdocs build --strict
+
+      - name: Configure git
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+
+      - name: Deploy docs
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            uv run mike deploy --push --update-aliases "${VERSION}" latest
+          else
+            uv run mike deploy --push --update-aliases dev latest
+          fi
+          uv run mike set-default --push latest
