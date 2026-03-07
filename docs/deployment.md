@@ -28,3 +28,9 @@ Provision queues with infrastructure as code. The examples directory includes:
 - `examples/terraform.tf`
 
 Provision queues ahead of time in production even though SimpleQ can create them on demand. Explicit infrastructure remains easier to audit.
+
+When a queue already exists, `Queue.ensure_exists()` reconciles mutable SQS
+attributes such as `VisibilityTimeout`, `ReceiveMessageWaitTimeSeconds`,
+`RedrivePolicy`, and FIFO content-based deduplication. Immutable properties
+like the queue name and standard-vs-FIFO type still need to be provisioned
+correctly up front.

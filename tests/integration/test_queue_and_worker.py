@@ -36,6 +36,57 @@ async def test_standard_queue_round_trip(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_ensure_exists_reconciles_existing_queue_attributes(
+    localstack_endpoint: str,
+    unique_name,
+    cleanup_queues,
+) -> None:
+    queue_name = unique_name("reconcile")
+    initial_simpleq = SimpleQ(
+        endpoint_url=localstack_endpoint,
+        wait_seconds=0,
+        visibility_timeout=2,
+    )
+    initial_queue = initial_simpleq.queue(
+        queue_name,
+        dlq=True,
+        wait_seconds=0,
+        visibility_timeout=2,
+    )
+    cleanup_queues.append(initial_queue)
+    await initial_queue.ensure_exists()
+
+    updated_simpleq = SimpleQ(
+        endpoint_url=localstack_endpoint,
+        wait_seconds=4,
+        visibility_timeout=7,
+    )
+    updated_queue = updated_simpleq.queue(
+        queue_name,
+        dlq=True,
+        wait_seconds=4,
+        visibility_timeout=7,
+    )
+    await updated_queue.ensure_exists()
+
+    queue_url = await updated_queue.ensure_exists()
+    attributes = await updated_simpleq.transport.get_queue_attributes(
+        updated_queue.name,
+        queue_url,
+        [
+            "VisibilityTimeout",
+            "ReceiveMessageWaitTimeSeconds",
+            "RedrivePolicy",
+        ],
+    )
+
+    assert attributes["VisibilityTimeout"] == "7"
+    assert attributes["ReceiveMessageWaitTimeSeconds"] == "4"
+    assert initial_queue.dlq_name in attributes["RedrivePolicy"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_worker_lazy_import_preserves_schema_metadata(
     localstack_endpoint: str,
     unique_name,

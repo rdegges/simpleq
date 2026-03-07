@@ -124,6 +124,8 @@ class SQSClient:
     ) -> str:
         """Return a queue URL, creating the queue if necessary."""
         if url := await self.get_queue_url(queue_name):
+            if attributes:
+                await self.set_queue_attributes(queue_name, url, attributes)
             return url
         return await self.create_queue(queue_name, attributes=attributes, tags=tags)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import sys
 from pathlib import Path
@@ -67,6 +68,57 @@ async def test_live_standard_and_fifo_smoke(tmp_path) -> None:
     finally:
         await standard.delete()
         await fifo.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_live_existing_queue_attributes_are_reconciled() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    queue_name = f"simpleq-live-reconcile-{uuid4().hex[:8]}"
+    initial_simpleq = SimpleQ(wait_seconds=0, visibility_timeout=2)
+    initial_queue = initial_simpleq.queue(
+        queue_name,
+        dlq=True,
+        wait_seconds=0,
+        visibility_timeout=2,
+    )
+    await initial_queue.ensure_exists()
+
+    updated_simpleq = SimpleQ(wait_seconds=5, visibility_timeout=9)
+    updated_queue = updated_simpleq.queue(
+        queue_name,
+        dlq=True,
+        wait_seconds=5,
+        visibility_timeout=9,
+    )
+
+    try:
+        queue_url = await updated_queue.ensure_exists()
+        attributes = await updated_simpleq.transport.get_queue_attributes(
+            updated_queue.name,
+            queue_url,
+            [
+                "VisibilityTimeout",
+                "ReceiveMessageWaitTimeSeconds",
+                "RedrivePolicy",
+            ],
+        )
+
+        redrive_policy = json.loads(attributes["RedrivePolicy"])
+        assert attributes["VisibilityTimeout"] == "9"
+        assert attributes["ReceiveMessageWaitTimeSeconds"] == "5"
+        assert initial_queue.dlq_name in redrive_policy["deadLetterTargetArn"]
+    finally:
+        await updated_queue.delete()
 
 
 @pytest.mark.live

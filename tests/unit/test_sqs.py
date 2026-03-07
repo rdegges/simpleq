@@ -172,6 +172,30 @@ async def test_transport_happy_path_methods(transport: SQSClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_ensure_queue_reconciles_existing_attributes(
+    transport: SQSClient,
+) -> None:
+    url = await transport.ensure_queue(
+        "emails",
+        attributes={"VisibilityTimeout": "45", "ReceiveMessageWaitTimeSeconds": "5"},
+    )
+
+    assert url == "https://example.com/emails"
+    assert ("get_queue_url", {"QueueName": "emails"}) in transport.client.calls
+    assert (
+        "set_queue_attributes",
+        {
+            "QueueUrl": "https://example.com/emails",
+            "Attributes": {
+                "VisibilityTimeout": "45",
+                "ReceiveMessageWaitTimeSeconds": "5",
+            },
+        },
+    ) in transport.client.calls
+    assert not any(call[0] == "create_queue" for call in transport.client.calls)
+
+
+@pytest.mark.asyncio
 async def test_require_queue_url_raises(transport: SQSClient) -> None:
     with pytest.raises(QueueNotFoundError):
         await transport.require_queue_url("missing")
