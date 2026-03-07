@@ -1,66 +1,114 @@
 # SimpleQ
 
-A simple, infinitely scalable, SQS based queue.
+SimpleQ is the Python task queue for AWS SQS: async-first, SQS-native, and intentionally small enough to feel like RQ while still exposing the AWS features production teams actually care about.
 
-[![Build Status](https://travis-ci.org/rdegges/simpleq.svg?branch=master)](https://travis-ci.org/rdegges/simpleq)
+![SimpleQ dashboard preview](docs/assets/dashboard-preview.svg)
 
-![SimpleQ Logo](https://github.com/rdegges/simpleq/raw/master/assets/happy-snake.jpg)
+## Why SimpleQ
 
+- Native SQS support instead of a lowest-common-denominator broker abstraction
+- First-class FIFO queues, DLQs, long polling, batching, and visibility heartbeats
+- Pydantic-backed task payload validation
+- Sync wrappers for enqueueing and workers when you do not want to manage an event loop
+- LocalStack-friendly local development with a built-in in-memory transport for tests
+- Structured logging, Prometheus metrics, and local request-cost tracking
 
-## Meta
+## Install
 
-- Author: Randall Degges
-- Email: r@rdegges.com
-- Site: http://www.rdegges.com
-- Status: in-development, active
+```bash
+python -m pip install simpleq
+```
 
+For local development with LocalStack:
 
-## Purpose
+```bash
+docker run -d --name simpleq-localstack -p 4566:4566 localstack/localstack
+export SIMPLEQ_ENDPOINT_URL=http://localhost:4566
+```
 
-As I've been developing large scale web applications in Python for several
-years, I've come to try all of the available queueing solutions, namely
-[Celery][] and [RQ][].
+## Quick Start
 
-What I love about Celery is that it supports many backends, and is extremely
-configurable.  Celery is great for large projects where you need to support very
-specific queueing requirements, and have lots of time to spend configuring and
-optimizing your software.
+```python
+from pydantic import BaseModel
 
-On the other end of the spectrum is RQ -- RQ is a very simple, minimalistic,
-queueing system which exclusively works with [Redis][].  I love RQ because it
-can be dropped into any Python project in a number of minutes, and requires very
-little configuration.  It also ships with a great dashboard and utilities.
+from simpleq import SimpleQ
 
-**Now the downsides.**
-
-As I've built more and more software over the years, I've come to really
-appreciate [Amazon SQS][] (*Simple Queue Service*).  Not only is it incredibly
-fast and available in all of the [AWS Regions][], but it's the cheapest possible
-queueing system (*in terms of hosting costs*) by a huge margin, it requires 0
-setup and configuration (*other than having an AWS account*), and almost never
-goes down.
-
-What I really want to use is a simple queue system like RQ, that exclusively
-runs on SQS and is optimized for speed and cost.  This means a queue system that
-will properly handle batching messages (*my main issue with Celery is that it
-does not support this*) and require minimal configuration.
-
-My goal with SimpleQ is to build the queueing system I've always wanted: a
-simple SQS based queue that is extremely stable, fast, and cost effective.
+sq = SimpleQ()
+queue = sq.queue("emails", dlq=True, wait_seconds=0)
 
 
-## Documentation
-
-This project's documentation is hosted at ReadTheDocs, for all usage and setup
-information you'll want to follow this link:
-http://simpleq.readthedocs.org/en/latest
-
-
--Randall
+class EmailPayload(BaseModel):
+    to: str
+    subject: str
+    body: str
 
 
-  [Celery]: http://www.celeryproject.org/ "Celery Task Queue"
-  [RQ]: http://python-rq.org/ "Python RQ"
-  [Redis]: http://redis.io/ "Redis"
-  [Amazon SQS]: http://aws.amazon.com/sqs/ "SQS"
-  [AWS Regions]: http://docs.aws.amazon.com/general/latest/gr/rande.html#sqs_region "AWS SQS Regions"
+@sq.task(queue=queue, schema=EmailPayload)
+def send_email(payload: EmailPayload) -> None:
+    print(f"Sending {payload.subject} to {payload.to}")
+
+
+if __name__ == "__main__":
+    send_email.delay_sync(
+        to="user@example.com",
+        subject="Hello",
+        body="SimpleQ is ready.",
+    )
+    sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
+```
+
+Run the bundled example:
+
+```bash
+python examples/basic.py
+```
+
+## CLI
+
+```bash
+simpleq doctor --check-sqs
+simpleq init myapp
+simpleq queue create emails --dlq
+simpleq task list --import-module myapp.tasks
+simpleq job enqueue myapp.tasks:send_email --import-module myapp.tasks --payload-json '{"to":"user@example.com","subject":"Welcome","body":"Hello"}'
+simpleq worker start -q emails --import-module myapp.tasks --reload
+```
+
+When you pass `--import-module`, SimpleQ reuses the queue configuration declared by those tasks. A worker started with `-q emails` will pick up the imported queue's FIFO, DLQ, visibility timeout, and wait settings when there is a single configured match.
+
+## How It Compares
+
+| Feature | SimpleQ | Celery | RQ | TaskIQ |
+| --- | --- | --- | --- | --- |
+| SQS-native queue management | Yes | Partial | No | Partial |
+| FIFO queue support | Yes | No | No | Broker-dependent |
+| DLQ and redrive workflow | Yes | Broker-dependent | No | Broker-dependent |
+| Sync and async APIs | Yes | Mixed | Mostly sync | Yes |
+| Pydantic task payloads | Yes | Manual | Manual | Yes |
+| Local request-cost tracking | Yes | No | No | No |
+
+SimpleQ is not trying to replace every broker in every environment. It is optimized for Python teams that already deploy on AWS and want SQS to stay visible instead of hidden.
+
+## Docs
+
+- [Overview](docs/index.md)
+- [Quick start](docs/quickstart.md)
+- [API reference](docs/api.md)
+- [Testing](docs/testing.md)
+- [Deployment](docs/deployment.md)
+- [FIFO and DLQ cookbook](docs/fifo-dlq.md)
+- [Compatibility matrix](docs/compatibility.md)
+- [Migrating from Celery](docs/migration-celery.md)
+- [Migrating from RQ](docs/migration-rq.md)
+
+## Development
+
+```bash
+uv sync --all-extras
+uv run pytest tests/unit
+docker compose up -d localstack
+uv run pytest tests/integration
+uv run ruff check .
+uv run mypy simpleq
+uv run mkdocs build --strict
+```

@@ -1,0 +1,29 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="720" rx="28" fill="#F4E9DB"/>
+  <rect x="48" y="48" width="1104" height="624" rx="24" fill="#FFFDFC" stroke="#D7C4AE" stroke-width="2"/>
+  <rect x="88" y="96" width="292" height="180" rx="20" fill="#FFF7F0" stroke="#E4D2BE" stroke-width="2"/>
+  <rect x="412" y="96" width="328" height="180" rx="20" fill="#FFFFFF" stroke="#E4D2BE" stroke-width="2"/>
+  <rect x="772" y="96" width="340" height="180" rx="20" fill="#0F766E" opacity="0.08"/>
+  <rect x="772" y="96" width="340" height="180" rx="20" stroke="#B8D8D2" stroke-width="2"/>
+  <rect x="88" y="312" width="1024" height="304" rx="20" fill="#FFFFFF" stroke="#E4D2BE" stroke-width="2"/>
+  <text x="112" y="148" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="36" font-weight="700">SimpleQ Dashboard</text>
+  <text x="112" y="192" fill="#6F665F" font-family="IBM Plex Sans, Arial, sans-serif" font-size="20">AWS-native queues, retries, and cost telemetry</text>
+  <text x="112" y="244" fill="#0F766E" font-family="IBM Plex Sans, Arial, sans-serif" font-size="54" font-weight="700">$0.000124</text>
+  <text x="436" y="148" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="28" font-weight="700">Queue Health</text>
+  <text x="436" y="192" fill="#6F665F" font-family="IBM Plex Sans, Arial, sans-serif" font-size="20">emails</text>
+  <text x="436" y="232" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="44" font-weight="700">0 visible</text>
+  <text x="780" y="148" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="28" font-weight="700">Worker Status</text>
+  <text x="780" y="192" fill="#6F665F" font-family="IBM Plex Sans, Arial, sans-serif" font-size="20">concurrency=10</text>
+  <text x="780" y="232" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="44" font-weight="700">Healthy</text>
+  <text x="120" y="360" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="28" font-weight="700">Queues</text>
+  <text x="120" y="412" fill="#6F665F" font-family="IBM Plex Sans, Arial, sans-serif" font-size="20">emails</text>
+  <text x="420" y="412" fill="#6F665F" font-family="IBM Plex Sans, Arial, sans-serif" font-size="20">Visible</text>
+  <text x="640" y="412" fill="#6F665F" font-family="IBM Plex Sans, Arial, sans-serif" font-size="20">In flight</text>
+  <text x="860" y="412" fill="#6F665F" font-family="IBM Plex Sans, Arial, sans-serif" font-size="20">Delayed</text>
+  <rect x="120" y="438" width="960" height="72" rx="14" fill="#F9F2E9"/>
+  <text x="144" y="484" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="24" font-weight="600">emails</text>
+  <text x="446" y="484" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="24" font-weight="600">0</text>
+  <text x="666" y="484" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="24" font-weight="600">0</text>
+  <text x="886" y="484" fill="#1C1A18" font-family="IBM Plex Sans, Arial, sans-serif" font-size="24" font-weight="600">0</text>
+  <text x="120" y="574" fill="#6F665F" font-family="IBM Plex Sans, Arial, sans-serif" font-size="18">Preview illustration of the built-in dashboard and metrics view.</text>
+</svg>

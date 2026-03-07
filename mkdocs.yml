@@ -1,0 +1,30 @@
+site_name: SimpleQ
+site_description: The Python task queue for AWS SQS.
+theme:
+  name: material
+extra:
+  version:
+    provider: mike
+nav:
+  - Overview: index.md
+  - Quick Start: quickstart.md
+  - API Reference: api.md
+  - Testing: testing.md
+  - Deployment: deployment.md
+  - FIFO and DLQ Cookbook: fifo-dlq.md
+  - IAM Guide: iam.md
+  - LocalStack: localstack.md
+  - Troubleshooting: troubleshooting.md
+  - Compatibility: compatibility.md
+  - Benchmarks: benchmarks.md
+  - Migration: migration.md
+  - Migrating from Celery: migration-celery.md
+  - Migrating from RQ: migration-rq.md
+  - Live AWS: live-aws.md
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
