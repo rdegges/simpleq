@@ -69,6 +69,16 @@ Run the bundled example:
 python examples/basic.py
 ```
 
+## Queue naming rules
+
+SimpleQ validates queue names locally before making AWS requests:
+
+- Standard queues: `1-80` characters using letters, numbers, `-`, and `_`
+- FIFO queues: same rules, plus required `.fifo` suffix
+
+Invalid names now fail fast with `QueueValidationError`, which avoids slower
+AWS-side validation failures at enqueue or queue-creation time.
+
 ## CLI
 
 ```bash

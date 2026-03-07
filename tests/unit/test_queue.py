@@ -19,6 +19,33 @@ def test_normalize_queue_name_validates_fifo_suffix() -> None:
         normalize_queue_name("orders.fifo", fifo=False)
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "",
+        "name with spaces",
+        "name/with/slash",
+        "name:with:colon",
+        "name*with*wildcards",
+    ],
+)
+def test_normalize_queue_name_rejects_invalid_characters(name: str) -> None:
+    with pytest.raises(QueueValidationError):
+        normalize_queue_name(name, fifo=False)
+
+
+def test_normalize_queue_name_rejects_names_longer_than_80_characters() -> None:
+    long_name = "a" * 81
+    with pytest.raises(QueueValidationError):
+        normalize_queue_name(long_name, fifo=False)
+
+
+def test_normalize_queue_name_rejects_fifo_base_names_longer_than_limit() -> None:
+    too_long_fifo = ("a" * 76) + ".fifo"
+    with pytest.raises(QueueValidationError):
+        normalize_queue_name(too_long_fifo, fifo=True)
+
+
 def test_queue_derives_dlq_name() -> None:
     simpleq = SimpleQ()
     assert simpleq.queue("emails", dlq=True).dlq_name == "emails-dlq"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
@@ -19,6 +20,9 @@ from simpleq.job import (
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
+
+_QUEUE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+_MAX_QUEUE_NAME_LENGTH = 80
 
 
 @dataclass(frozen=True, slots=True)
@@ -487,10 +491,25 @@ class Queue:
 
 def normalize_queue_name(name: str, *, fifo: bool) -> str:
     """Validate and normalize a queue name."""
+    if not name:
+        raise QueueValidationError("Queue name must be non-empty.")
+    if len(name) > _MAX_QUEUE_NAME_LENGTH:
+        raise QueueValidationError(
+            f"Queue name must be <= {_MAX_QUEUE_NAME_LENGTH} characters."
+        )
+
     if fifo and not name.endswith(".fifo"):
         raise QueueValidationError("FIFO queues must end with '.fifo'.")
     if not fifo and name.endswith(".fifo"):
         raise QueueValidationError("Standard queues must not end with '.fifo'.")
+
+    base_name = name.removesuffix(".fifo") if fifo else name
+    if not base_name:
+        raise QueueValidationError("Queue name must include characters before '.fifo'.")
+    if not _QUEUE_NAME_PATTERN.fullmatch(base_name):
+        raise QueueValidationError(
+            "Queue names may only contain letters, numbers, hyphens, and underscores."
+        )
     return name
 
 

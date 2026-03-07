@@ -48,6 +48,15 @@ same `queue` object, or pass the same FIFO/DLQ/retry/timing settings each time
 you call `sq.queue(...)`; SimpleQ now raises `QueueValidationError` when a later
 definition would silently change the existing queue configuration.
 
+## Queue naming rules
+
+SimpleQ validates queue names before sending requests to SQS:
+
+- Standard queues must be `1-80` characters using only letters, numbers, `-`, and `_`
+- FIFO queues follow the same character rules and must end with `.fifo`
+
+If the name is invalid, `sq.queue(...)` raises `QueueValidationError` immediately.
+
 ## Async example
 
 ```python
