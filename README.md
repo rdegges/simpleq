@@ -31,6 +31,10 @@ Boolean environment flags are strict. Use `1/0`, `true/false`, `yes/no`, or
 `on/off` for values such as `SIMPLEQ_ENABLE_METRICS`,
 `SIMPLEQ_ENABLE_TRACING`, and `SIMPLEQ_COST_TRACKING`.
 
+Numeric queue/runtime settings are validated eagerly against SQS limits:
+`batch_size`/`max_messages` `1-10`, `wait_seconds` `0-20`,
+`visibility_timeout` `0-43200`, and `concurrency >= 1`.
+
 ## Quick Start
 
 ```python

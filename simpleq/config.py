@@ -12,6 +12,26 @@ from urllib.parse import urlparse
 BackoffStrategy = Literal["constant", "linear", "exponential"]
 
 
+def _validate_int_range(
+    *,
+    name: str,
+    value: int,
+    minimum: int,
+    maximum: int | None = None,
+) -> None:
+    if value < minimum:
+        if maximum is None:
+            raise ValueError(f"{name} must be at least {minimum}.")
+        raise ValueError(f"{name} must be between {minimum} and {maximum}.")
+    if maximum is not None and value > maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}.")
+
+
+def _validate_non_negative_float(*, name: str, value: float) -> None:
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative.")
+
+
 def _bool_env(name: str) -> bool | None:
     value = os.getenv(name)
     if value is None:
@@ -191,7 +211,38 @@ class SimpleQConfig:
             or os.getenv("SIMPLEQ_DEFAULT_QUEUE")
             or config.default_queue_name
         )
+        validate_config(config)
         return config
+
+
+def validate_config(config: SimpleQConfig) -> None:
+    """Validate resolved configuration values."""
+    _validate_int_range(
+        name="batch_size", value=config.batch_size, minimum=1, maximum=10
+    )
+    _validate_int_range(
+        name="wait_seconds",
+        value=config.wait_seconds,
+        minimum=0,
+        maximum=20,
+    )
+    _validate_int_range(
+        name="visibility_timeout",
+        value=config.visibility_timeout,
+        minimum=0,
+        maximum=43_200,
+    )
+    _validate_int_range(name="concurrency", value=config.concurrency, minimum=1)
+    _validate_int_range(
+        name="graceful_shutdown_timeout",
+        value=config.graceful_shutdown_timeout,
+        minimum=0,
+    )
+    _validate_int_range(name="max_retries", value=config.max_retries, minimum=0)
+    _validate_non_negative_float(
+        name="sqs_price_per_million",
+        value=config.sqs_price_per_million,
+    )
 
 
 def resolve_bool(*, explicit: bool | None, env_name: str, default: bool) -> bool:

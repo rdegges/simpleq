@@ -10,7 +10,10 @@ simpleq worker start -q emails -q orders.fifo --import-module myapp.tasks
 
 Recommended settings:
 
-- set `SIMPLEQ_CONCURRENCY`
+- set `SIMPLEQ_CONCURRENCY` (must be `>= 1`)
+- keep `SIMPLEQ_BATCH_SIZE` between `1` and `10`
+- keep `SIMPLEQ_WAIT_SECONDS` between `0` and `20`
+- keep `SIMPLEQ_VISIBILITY_TIMEOUT` between `0` and `43200`
 - set `SIMPLEQ_LOG_LEVEL=INFO`
 - set boolean flags (`SIMPLEQ_ENABLE_METRICS`, `SIMPLEQ_ENABLE_TRACING`,
   `SIMPLEQ_COST_TRACKING`) with `1/0`, `true/false`, `yes/no`, or `on/off`

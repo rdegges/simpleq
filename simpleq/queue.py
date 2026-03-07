@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 
 _QUEUE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 _MAX_QUEUE_NAME_LENGTH = 80
+_MAX_RECEIVE_MESSAGES = 10
+_MAX_WAIT_SECONDS = 20
+_MAX_VISIBILITY_TIMEOUT = 43_200
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +99,11 @@ class Queue:
         self.tags = tags or {}
         self._queue_url: str | None = None
         self._dlq_url: str | None = None
+        self._validate_receive_options(
+            max_messages=self.batch_size,
+            wait_seconds=self.wait_seconds,
+            visibility_timeout=self.visibility_timeout,
+        )
 
     def __repr__(self) -> str:
         """Return a readable queue representation."""
@@ -221,8 +229,8 @@ class Queue:
         queue_url = await self.ensure_exists()
         payloads: list[dict[str, Any]] = []
         for entry in entries:
-            resolved_group_id = (
-                entry.message_group_id or routing_message_group_id(entry.job)
+            resolved_group_id = entry.message_group_id or routing_message_group_id(
+                entry.job
             )
             resolved_deduplication_id = (
                 entry.deduplication_id or routing_deduplication_id(entry.job)
@@ -270,14 +278,23 @@ class Queue:
         wait_seconds: int | None = None,
     ) -> list[Job]:
         """Receive jobs from the queue."""
+        resolved_max_messages = (
+            self.batch_size if max_messages is None else max_messages
+        )
+        resolved_wait_seconds = (
+            wait_seconds if wait_seconds is not None else self.wait_seconds
+        )
+        self._validate_receive_options(
+            max_messages=resolved_max_messages,
+            wait_seconds=resolved_wait_seconds,
+            visibility_timeout=visibility_timeout,
+        )
         queue_url = await self.ensure_exists()
         messages = await self.simpleq.transport.receive_messages(
             self.name,
             queue_url,
-            max_messages=max_messages or self.batch_size,
-            wait_seconds=wait_seconds
-            if wait_seconds is not None
-            else self.wait_seconds,
+            max_messages=resolved_max_messages,
+            wait_seconds=resolved_wait_seconds,
             visibility_timeout=visibility_timeout,
         )
         return [Job.from_sqs_message(self.name, message) for message in messages]
@@ -487,6 +504,28 @@ class Queue:
                 raise QueueValidationError(
                     "FIFO queues without content-based deduplication require a deduplication_id."
                 )
+
+    def _validate_receive_options(
+        self,
+        *,
+        max_messages: int,
+        wait_seconds: int,
+        visibility_timeout: int | None,
+    ) -> None:
+        if max_messages < 1 or max_messages > _MAX_RECEIVE_MESSAGES:
+            raise QueueValidationError(
+                f"max_messages must be between 1 and {_MAX_RECEIVE_MESSAGES}."
+            )
+        if wait_seconds < 0 or wait_seconds > _MAX_WAIT_SECONDS:
+            raise QueueValidationError(
+                f"wait_seconds must be between 0 and {_MAX_WAIT_SECONDS}."
+            )
+        if visibility_timeout is not None and (
+            visibility_timeout < 0 or visibility_timeout > _MAX_VISIBILITY_TIMEOUT
+        ):
+            raise QueueValidationError(
+                f"visibility_timeout must be between 0 and {_MAX_VISIBILITY_TIMEOUT}."
+            )
 
 
 def normalize_queue_name(name: str, *, fifo: bool) -> str:

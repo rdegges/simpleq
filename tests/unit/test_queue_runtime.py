@@ -145,6 +145,34 @@ async def test_queue_enqueue_receive_and_iter_jobs(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"max_messages": 0}, "max_messages must be between 1 and 10"),
+        ({"max_messages": 11}, "max_messages must be between 1 and 10"),
+        ({"wait_seconds": -1}, "wait_seconds must be between 0 and 20"),
+        ({"wait_seconds": 21}, "wait_seconds must be between 0 and 20"),
+        (
+            {"visibility_timeout": -1},
+            "visibility_timeout must be between 0 and 43200",
+        ),
+        (
+            {"visibility_timeout": 43_201},
+            "visibility_timeout must be between 0 and 43200",
+        ),
+    ],
+)
+async def test_queue_receive_rejects_invalid_options(
+    simpleq_with_fake_transport: SimpleQ,
+    kwargs: dict[str, int],
+    match: str,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails")
+    with pytest.raises(QueueValidationError, match=match):
+        await queue.receive(**kwargs)
+
+
+@pytest.mark.asyncio
 async def test_queue_batch_dlq_and_misc_branches(
     simpleq_with_fake_transport: SimpleQ,
 ) -> None:
@@ -198,7 +226,10 @@ async def test_queue_batch_dlq_and_misc_branches(
     ]
     simpleq_with_fake_transport.transport.receive_calls.clear()
     assert await queue.redrive_dlq_jobs() == 1
-    assert simpleq_with_fake_transport.transport.receive_calls[0]["visibility_timeout"] == 1
+    assert (
+        simpleq_with_fake_transport.transport.receive_calls[0]["visibility_timeout"]
+        == 1
+    )
     assert "receipt-redrive" in simpleq_with_fake_transport.transport.deleted_messages
 
     no_dlq = simpleq_with_fake_transport.queue("plain", wait_seconds=0)
@@ -297,7 +328,10 @@ async def test_fifo_dlq_and_redrive_preserve_group_and_rotate_deduplication_id(
 
     simpleq_with_fake_transport.transport.receive_calls.clear()
     assert await queue.redrive_dlq_jobs(limit=1) == 1
-    assert simpleq_with_fake_transport.transport.receive_calls[0]["visibility_timeout"] == 1
+    assert (
+        simpleq_with_fake_transport.transport.receive_calls[0]["visibility_timeout"]
+        == 1
+    )
     redrive_send = simpleq_with_fake_transport.transport.sent[-1]
     assert redrive_send["queue_name"] == queue.name
     assert redrive_send["message_group_id"] == "customer-1"

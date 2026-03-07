@@ -98,10 +98,10 @@ def test_resolve_bool_and_cast_log_level(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_numeric_env_and_explicit_float_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("SIMPLEQ_BATCH_SIZE", "12")
+    monkeypatch.setenv("SIMPLEQ_BATCH_SIZE", "8")
     monkeypatch.setenv("SIMPLEQ_SQS_PRICE_PER_MILLION", "0.9")
     from_env = SimpleQConfig.from_overrides()
-    assert from_env.batch_size == 12
+    assert from_env.batch_size == 8
     assert from_env.sqs_price_per_million == 0.9
 
     explicit = SimpleQConfig.from_overrides(sqs_price_per_million=0.2)
@@ -114,3 +114,29 @@ def test_from_overrides_rejects_invalid_boolean_env(
     monkeypatch.setenv("SIMPLEQ_ENABLE_METRICS", "maybe")
     with pytest.raises(ValueError, match="Unsupported boolean value"):
         SimpleQConfig.from_overrides()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"batch_size": 0}, "batch_size must be between 1 and 10"),
+        ({"batch_size": 11}, "batch_size must be between 1 and 10"),
+        ({"wait_seconds": -1}, "wait_seconds must be between 0 and 20"),
+        ({"wait_seconds": 21}, "wait_seconds must be between 0 and 20"),
+        (
+            {"visibility_timeout": -1},
+            "visibility_timeout must be between 0 and 43200",
+        ),
+        (
+            {"visibility_timeout": 43_201},
+            "visibility_timeout must be between 0 and 43200",
+        ),
+        ({"concurrency": 0}, "concurrency must be at least 1"),
+    ],
+)
+def test_from_overrides_rejects_invalid_numeric_ranges(
+    kwargs: dict[str, int],
+    match: str,
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        SimpleQConfig.from_overrides(**kwargs)
