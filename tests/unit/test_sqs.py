@@ -8,7 +8,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from simpleq.config import SimpleQConfig
-from simpleq.exceptions import QueueNotFoundError
+from simpleq.exceptions import QueueBatchError, QueueNotFoundError
 from simpleq.observability import CostTracker
 from simpleq.sqs import SQSClient, uses_local_credentials
 
@@ -18,6 +18,11 @@ class FakeBotoSQSClient:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.batch_successful: list[dict[str, str]] = [
+            {"Id": "1", "MessageId": "batch-1"},
+            {"Id": "2", "MessageId": "batch-2"},
+        ]
+        self.batch_failed: list[dict[str, str]] = []
 
     def get_queue_url(self, *, QueueName: str) -> dict[str, str]:
         self.calls.append(("get_queue_url", {"QueueName": QueueName}))
@@ -78,7 +83,10 @@ class FakeBotoSQSClient:
 
     def send_message_batch(self, **kwargs: Any) -> dict[str, list[dict[str, str]]]:
         self.calls.append(("send_message_batch", kwargs))
-        return {"Successful": [{"MessageId": "batch-1"}, {"MessageId": "batch-2"}]}
+        return {
+            "Successful": self.batch_successful,
+            "Failed": self.batch_failed,
+        }
 
     def receive_message(self, **kwargs: Any) -> dict[str, list[dict[str, str]]]:
         self.calls.append(("receive_message", kwargs))
@@ -148,7 +156,10 @@ async def test_transport_happy_path_methods(transport: SQSClient) -> None:
     assert await transport.send_message_batch(
         "jobs",
         "https://example.com/jobs",
-        [{"Id": "1", "MessageBody": "{}"}],
+        [
+            {"Id": "1", "MessageBody": "{}"},
+            {"Id": "2", "MessageBody": "{}"},
+        ],
     ) == ["batch-1", "batch-2"]
     messages = await transport.receive_messages(
         "jobs",
@@ -199,6 +210,41 @@ async def test_ensure_queue_reconciles_existing_attributes(
 async def test_require_queue_url_raises(transport: SQSClient) -> None:
     with pytest.raises(QueueNotFoundError):
         await transport.require_queue_url("missing")
+
+
+@pytest.mark.asyncio
+async def test_send_message_batch_preserves_entry_order(transport: SQSClient) -> None:
+    transport.client.batch_successful = [
+        {"Id": "2", "MessageId": "batch-2"},
+        {"Id": "1", "MessageId": "batch-1"},
+    ]
+    ids = await transport.send_message_batch(
+        "jobs",
+        "https://example.com/jobs",
+        [
+            {"Id": "1", "MessageBody": "{}"},
+            {"Id": "2", "MessageBody": "{}"},
+        ],
+    )
+    assert ids == ["batch-1", "batch-2"]
+
+
+@pytest.mark.asyncio
+async def test_send_message_batch_raises_on_partial_failure(
+    transport: SQSClient,
+) -> None:
+    transport.client.batch_failed = [
+        {"Id": "2", "Code": "InvalidMessageContents", "Message": "bad body"},
+    ]
+    with pytest.raises(QueueBatchError, match="InvalidMessageContents"):
+        await transport.send_message_batch(
+            "jobs",
+            "https://example.com/jobs",
+            [
+                {"Id": "1", "MessageBody": "{}"},
+                {"Id": "2", "MessageBody": "{bad-json"},
+            ],
+        )
 
 
 def test_uses_local_credentials() -> None:

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 import boto3
 from botocore.exceptions import ClientError
 
-from simpleq.exceptions import QueueNotFoundError
+from simpleq.exceptions import QueueBatchError, QueueNotFoundError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -230,7 +230,30 @@ class SQSClient:
             QueueUrl=queue_url,
             Entries=entries,
         )
-        return [str(item["MessageId"]) for item in response.get("Successful", [])]
+        failed = list(response.get("Failed", []))
+        if failed:
+            details = ", ".join(
+                f"{item.get('Id', '?')}:{item.get('Code', 'Unknown')}"
+                for item in failed
+            )
+            raise QueueBatchError(f"send_message_batch failed for entries: {details}")
+
+        successful = list(response.get("Successful", []))
+        ids_by_entry = {
+            str(item["Id"]): str(item["MessageId"])
+            for item in successful
+            if "Id" in item and "MessageId" in item
+        }
+        missing_entry_ids = [
+            str(entry["Id"]) for entry in entries if str(entry["Id"]) not in ids_by_entry
+        ]
+        if missing_entry_ids:
+            raise QueueBatchError(
+                "send_message_batch response missing success IDs for entries: "
+                + ", ".join(missing_entry_ids)
+            )
+        message_ids = [ids_by_entry[str(entry["Id"])] for entry in entries]
+        return message_ids
 
     async def receive_messages(
         self,

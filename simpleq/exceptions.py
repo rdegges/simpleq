@@ -23,6 +23,10 @@ class QueueNotFoundError(QueueError):
     """Raised when an SQS queue does not exist."""
 
 
+class QueueBatchError(QueueError):
+    """Raised when a batch queue operation partially fails."""
+
+
 class TaskError(SimpleQError):
     """Base exception for task-related errors."""
 
