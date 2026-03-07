@@ -9,6 +9,7 @@ import pytest
 
 from simpleq import SimpleQ
 from simpleq._sync import run_sync
+from simpleq.exceptions import QueueValidationError
 from simpleq.queue import Queue
 from simpleq.testing import InMemoryTransport
 
@@ -52,6 +53,43 @@ def test_simpleq_queue_cache_and_resolution(monkeypatch: pytest.MonkeyPatch) -> 
     assert simpleq.resolve_queue(marker) is marker
 
 
+def test_simpleq_queue_uses_client_default_max_retries() -> None:
+    simpleq = SimpleQ(max_retries=7, transport=InMemoryTransport())
+
+    assert simpleq.queue("emails").max_retries == 7
+
+
+def test_simpleq_queue_rejects_conflicting_redefinition() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+    original = simpleq.queue(
+        "emails",
+        dlq=True,
+        wait_seconds=0,
+        visibility_timeout=7,
+        tags={"env": "test"},
+    )
+
+    with pytest.raises(QueueValidationError, match="already configured differently"):
+        simpleq.queue(
+            "emails",
+            dlq=True,
+            wait_seconds=3,
+            visibility_timeout=7,
+            tags={"env": "test"},
+        )
+
+    with pytest.raises(QueueValidationError, match="already configured differently"):
+        simpleq.queue("emails", dlq=False)
+
+    assert simpleq.queue(
+        "emails",
+        dlq=True,
+        wait_seconds=0,
+        visibility_timeout=7,
+        tags={"env": "test"},
+    ) is original
+
+
 def test_resolve_queue_prefers_existing_configured_queue() -> None:
     simpleq = SimpleQ(transport=InMemoryTransport())
     configured = simpleq.queue(
@@ -87,6 +125,16 @@ def test_resolve_queue_rebinds_foreign_queue_to_current_simpleq() -> None:
     assert rebound.dlq is True
     assert rebound.wait_seconds == 0
     assert rebound.visibility_timeout == 9
+
+
+def test_resolve_queue_rejects_conflicting_foreign_queue() -> None:
+    source = SimpleQ(transport=InMemoryTransport())
+    foreign = source.queue("emails", wait_seconds=0)
+    target = SimpleQ(transport=InMemoryTransport())
+    target.queue("emails", wait_seconds=5)
+
+    with pytest.raises(QueueValidationError, match="already configured differently"):
+        target.resolve_queue(foreign)
 
 
 def test_simpleq_defers_transport_creation_until_first_use(

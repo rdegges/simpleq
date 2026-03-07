@@ -298,7 +298,7 @@ def test_job_enqueue_rebinds_imported_queue_handles(
         )
 
         target_received = target.run_sync(
-            target.queue("emails", dlq=True, wait_seconds=0).receive(
+            target.resolve_queue("emails").receive(
                 max_messages=1,
                 wait_seconds=0,
             )

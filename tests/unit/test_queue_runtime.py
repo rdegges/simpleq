@@ -23,6 +23,7 @@ class FakeTransport:
         self.sent_batches: list[list[dict[str, Any]]] = []
         self.deleted_messages: list[str] = []
         self.visibility_changes: list[int] = []
+        self.receive_calls: list[dict[str, Any]] = []
         self.receive_queue: list[list[dict[str, Any]]] = []
 
     async def ensure_queue(
@@ -57,6 +58,7 @@ class FakeTransport:
     async def receive_messages(
         self, queue_name: str, queue_url: str, **kwargs: Any
     ) -> list[dict[str, Any]]:
+        self.receive_calls.append(kwargs)
         return self.receive_queue.pop(0) if self.receive_queue else []
 
     async def delete_message(
@@ -194,7 +196,9 @@ async def test_queue_batch_dlq_and_misc_branches(
         ],
         [],
     ]
+    simpleq_with_fake_transport.transport.receive_calls.clear()
     assert await queue.redrive_dlq_jobs() == 1
+    assert simpleq_with_fake_transport.transport.receive_calls[0]["visibility_timeout"] == 1
     assert "receipt-redrive" in simpleq_with_fake_transport.transport.deleted_messages
 
     no_dlq = simpleq_with_fake_transport.queue("plain", wait_seconds=0)
@@ -291,7 +295,9 @@ async def test_fifo_dlq_and_redrive_preserve_group_and_rotate_deduplication_id(
         [],
     ]
 
+    simpleq_with_fake_transport.transport.receive_calls.clear()
     assert await queue.redrive_dlq_jobs(limit=1) == 1
+    assert simpleq_with_fake_transport.transport.receive_calls[0]["visibility_timeout"] == 1
     redrive_send = simpleq_with_fake_transport.transport.sent[-1]
     assert redrive_send["queue_name"] == queue.name
     assert redrive_send["message_group_id"] == "customer-1"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from simpleq._sync import run_sync
@@ -66,7 +66,7 @@ class Queue:
         *,
         fifo: bool = False,
         dlq: bool = False,
-        max_retries: int = 3,
+        max_retries: int | None = None,
         content_based_deduplication: bool = False,
         visibility_timeout: int | None = None,
         wait_seconds: int | None = None,
@@ -77,7 +77,9 @@ class Queue:
         self.name = normalize_queue_name(name, fifo=fifo)
         self.fifo = fifo
         self.dlq = dlq
-        self.max_retries = max_retries
+        self.max_retries = (
+            self.config.max_retries if max_retries is None else max_retries
+        )
         self.content_based_deduplication = content_based_deduplication
         self.visibility_timeout = (
             self.config.visibility_timeout
@@ -276,7 +278,13 @@ class Queue:
         )
         return [Job.from_sqs_message(self.name, message) for message in messages]
 
-    async def iter_jobs(self, *, limit: int | None = None) -> AsyncIterator[Job]:
+    async def iter_jobs(
+        self,
+        *,
+        limit: int | None = None,
+        visibility_timeout: int | None = None,
+        wait_seconds: int | None = None,
+    ) -> AsyncIterator[Job]:
         """Yield jobs until the queue is empty or ``limit`` is reached."""
         yielded = 0
         while True:
@@ -288,7 +296,11 @@ class Queue:
                 if remaining is None
                 else min(self.batch_size, remaining)
             )
-            jobs = await self.receive(max_messages=batch_size, wait_seconds=0)
+            jobs = await self.receive(
+                max_messages=batch_size,
+                visibility_timeout=visibility_timeout,
+                wait_seconds=0 if wait_seconds is None else wait_seconds,
+            )
             if not jobs:
                 return
             for job in jobs:
@@ -350,14 +362,7 @@ class Queue:
         if self.dlq_name is None:
             raise QueueValidationError("DLQ support is not enabled for this queue.")
 
-        dlq_queue = self.simpleq.queue(
-            self.dlq_name,
-            fifo=self.fifo,
-            dlq=False,
-            content_based_deduplication=self.content_based_deduplication,
-            visibility_timeout=1,
-            wait_seconds=0,
-        )
+        dlq_queue = self._dlq_queue()
         received: list[Job] = []
         remaining = limit
         while remaining > 0:
@@ -386,15 +391,12 @@ class Queue:
         if self.dlq_name is None:
             raise QueueValidationError("DLQ support is not enabled for this queue.")
         count = 0
-        dlq_queue = self.simpleq.queue(
-            self.dlq_name,
-            fifo=self.fifo,
-            dlq=False,
-            content_based_deduplication=self.content_based_deduplication,
-            visibility_timeout=0,
+        dlq_queue = self._dlq_queue()
+        async for job in dlq_queue.iter_jobs(
+            limit=limit,
+            visibility_timeout=1,
             wait_seconds=0,
-        )
-        async for job in dlq_queue.iter_jobs(limit=limit):
+        ):
             requeued = job.with_attempt(0)
             await self.enqueue(
                 requeued,
@@ -411,14 +413,7 @@ class Queue:
         if self.dlq_name is None:
             await self.ack(job)
             return
-        dlq_queue = self.simpleq.queue(
-            self.dlq_name,
-            fifo=self.fifo,
-            dlq=False,
-            content_based_deduplication=self.content_based_deduplication,
-            visibility_timeout=self.visibility_timeout,
-            wait_seconds=0,
-        )
+        dlq_queue = self._dlq_queue()
         failed_job = job.with_attempt(job.receive_count, error=error)
         await dlq_queue.enqueue(
             failed_job,
@@ -427,6 +422,24 @@ class Queue:
             attributes=job.message_attributes,
         )
         await self.ack(job)
+
+    def _dlq_queue(self) -> Queue:
+        """Return the canonical DLQ queue object for this queue."""
+        if self.dlq_name is None:
+            raise QueueValidationError("DLQ support is not enabled for this queue.")
+        return cast(
+            "Queue",
+            self.simpleq.queue(
+                self.dlq_name,
+                fifo=self.fifo,
+                dlq=False,
+                max_retries=self.max_retries,
+                content_based_deduplication=self.content_based_deduplication,
+                visibility_timeout=self.visibility_timeout,
+                wait_seconds=self.wait_seconds,
+                tags=dict(self.tags),
+            ),
+        )
 
     def _create_queue_attributes(
         self,

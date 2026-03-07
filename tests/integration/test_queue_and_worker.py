@@ -433,7 +433,10 @@ async def _dlq_has_messages(queue) -> bool:
         fifo=queue.fifo,
         dlq=False,
         content_based_deduplication=queue.content_based_deduplication,
-        wait_seconds=0,
+        max_retries=queue.max_retries,
+        visibility_timeout=queue.visibility_timeout,
+        wait_seconds=queue.wait_seconds,
+        tags=dict(queue.tags),
     )
     stats = await dlq_queue.stats()
     return stats.available_messages == 1

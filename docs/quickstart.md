@@ -43,6 +43,11 @@ send_email.delay_sync(
 sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
 ```
 
+Treat each queue name as a single definition per `SimpleQ` instance. Reuse the
+same `queue` object, or pass the same FIFO/DLQ/retry/timing settings each time
+you call `sq.queue(...)`; SimpleQ now raises `QueueValidationError` when a later
+definition would silently change the existing queue configuration.
+
 ## Async example
 
 ```python

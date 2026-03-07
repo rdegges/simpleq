@@ -58,6 +58,11 @@ if __name__ == "__main__":
     sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
 ```
 
+Within a single `SimpleQ` instance, a queue name has one source of truth. If
+you call `sq.queue("emails", ...)` again later, keep the configuration aligned
+or reuse the original `queue` object directly; conflicting definitions now fail
+fast with `QueueValidationError` instead of silently reusing stale settings.
+
 Run the bundled example:
 
 ```bash

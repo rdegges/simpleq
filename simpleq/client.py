@@ -78,7 +78,7 @@ class SimpleQ:
         self.registry = TaskRegistry()
         self._transport = transport
         self._session_factory = session_factory
-        self._queues: dict[tuple[str, bool, bool], Queue] = {}
+        self._queues: dict[str, Queue] = {}
 
     @property
     def transport(self) -> Any:
@@ -102,31 +102,64 @@ class SimpleQ:
         *,
         fifo: bool = False,
         dlq: bool = False,
-        max_retries: int = 3,
+        max_retries: int | None = None,
         content_based_deduplication: bool = False,
         visibility_timeout: int | None = None,
         wait_seconds: int | None = None,
         tags: dict[str, str] | None = None,
     ) -> Queue:
         """Create or return a cached queue object."""
-        key = (name, fifo, dlq)
-        if key not in self._queues:
-            self._queues[key] = Queue(
-                self,
-                name,
-                fifo=fifo,
-                dlq=dlq,
-                max_retries=max_retries,
-                content_based_deduplication=content_based_deduplication,
-                visibility_timeout=visibility_timeout,
-                wait_seconds=wait_seconds,
-                tags=tags,
-            )
-        return self._queues[key]
+        requested = Queue(
+            self,
+            name,
+            fifo=fifo,
+            dlq=dlq,
+            max_retries=max_retries,
+            content_based_deduplication=content_based_deduplication,
+            visibility_timeout=visibility_timeout,
+            wait_seconds=wait_seconds,
+            tags=tags,
+        )
+        if existing := self._queues.get(requested.name):
+            self._assert_queue_matches(existing, requested)
+            return existing
+        self._queues[requested.name] = requested
+        return requested
 
     def _configured_queues(self, name: str) -> list[Queue]:
         """Return cached queue objects for the given queue name."""
         return [queue for queue in self._queues.values() if queue.name == name]
+
+    def _assert_queue_matches(self, existing: Queue, requested: Queue) -> None:
+        """Ensure a queue name is not rebound to a different configuration."""
+        existing_config = self._queue_signature(existing)
+        requested_config = self._queue_signature(requested)
+        differences = [
+            f"{field}={existing_value!r} -> {requested_value!r}"
+            for field, existing_value in existing_config.items()
+            if requested_config[field] != existing_value
+            for requested_value in [requested_config[field]]
+        ]
+        if not differences:
+            return
+        difference_list = ", ".join(differences)
+        raise QueueValidationError(
+            f"Queue '{existing.name}' is already configured differently on this "
+            f"SimpleQ instance ({difference_list}). Reuse the original Queue "
+            "instance or keep the queue definition consistent."
+        )
+
+    def _queue_signature(self, queue: Queue) -> dict[str, object]:
+        """Return the stable queue options used to detect configuration drift."""
+        return {
+            "fifo": queue.fifo,
+            "dlq": queue.dlq,
+            "max_retries": queue.max_retries,
+            "content_based_deduplication": queue.content_based_deduplication,
+            "visibility_timeout": queue.visibility_timeout,
+            "wait_seconds": queue.wait_seconds,
+            "tags": dict(queue.tags),
+        }
 
     def _clone_queue(self, queue: Queue) -> Queue:
         """Rebuild a queue onto this client while preserving its configuration."""
