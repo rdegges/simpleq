@@ -235,7 +235,9 @@ class SimpleQ:
         return Worker(
             self,
             resolved_queues,
-            concurrency=concurrency or self.config.concurrency,
+            concurrency=(
+                self.config.concurrency if concurrency is None else concurrency
+            ),
             poll_interval=poll_interval,
         )
 

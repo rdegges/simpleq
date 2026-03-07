@@ -178,6 +178,12 @@ def test_simpleq_worker_factory() -> None:
     assert worker.queues[0].name == "emails"
 
 
+def test_simpleq_worker_factory_rejects_invalid_concurrency_override() -> None:
+    simpleq = SimpleQ(concurrency=4)
+    with pytest.raises(ValueError, match="concurrency must be at least 1"):
+        simpleq.worker(queues=["emails"], concurrency=0)
+
+
 def test_module_entrypoint_invokes_cli_main(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"value": False}
     monkeypatch.setattr("simpleq.cli.main", lambda: called.__setitem__("value", True))

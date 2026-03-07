@@ -53,6 +53,17 @@ def test_reconstruct_arguments_for_schema() -> None:
     assert args[0].to == "a@example.com"
 
 
+def test_worker_rejects_invalid_runtime_options() -> None:
+    simpleq = SimpleQ()
+    queue = FakeQueue(simpleq=simpleq)
+
+    with pytest.raises(ValueError, match="concurrency must be at least 1"):
+        Worker(simpleq, [queue], concurrency=0)
+
+    with pytest.raises(ValueError, match="poll_interval must be non-negative"):
+        Worker(simpleq, [queue], concurrency=1, poll_interval=-0.1)
+
+
 @pytest.mark.asyncio
 async def test_worker_handles_retry_and_dlq() -> None:
     simpleq = SimpleQ()

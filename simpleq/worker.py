@@ -28,6 +28,10 @@ class Worker:
         concurrency: int,
         poll_interval: float = 1.0,
     ) -> None:
+        if concurrency < 1:
+            raise ValueError("concurrency must be at least 1.")
+        if poll_interval < 0:
+            raise ValueError("poll_interval must be non-negative.")
         self.simpleq = simpleq
         self.queues = list(queues)
         self.concurrency = concurrency
