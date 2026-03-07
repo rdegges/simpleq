@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -26,6 +27,12 @@ def _load_dotenv(path: Path) -> None:
         os.environ.setdefault(key, value)
 
 
+def _live_simpleq(**overrides: object) -> SimpleQ:
+    """Build a SimpleQ client without auto-detecting LocalStack."""
+    with patch("simpleq.config.detect_localstack_endpoint", return_value=None):
+        return SimpleQ(**overrides)
+
+
 @pytest.mark.live
 @pytest.mark.asyncio
 async def test_live_standard_and_fifo_smoke(tmp_path) -> None:
@@ -39,7 +46,7 @@ async def test_live_standard_and_fifo_smoke(tmp_path) -> None:
     if missing:
         pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
 
-    simpleq = SimpleQ(wait_seconds=0, visibility_timeout=2)
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
     standard = simpleq.queue(f"simpleq-live-{uuid4().hex[:8]}", dlq=True)
     fifo = simpleq.queue(
         f"simpleq-live-{uuid4().hex[:8]}.fifo",
@@ -84,7 +91,7 @@ async def test_live_existing_queue_attributes_are_reconciled() -> None:
         pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
 
     queue_name = f"simpleq-live-reconcile-{uuid4().hex[:8]}"
-    initial_simpleq = SimpleQ(wait_seconds=0, visibility_timeout=2)
+    initial_simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
     initial_queue = initial_simpleq.queue(
         queue_name,
         dlq=True,
@@ -93,7 +100,7 @@ async def test_live_existing_queue_attributes_are_reconciled() -> None:
     )
     await initial_queue.ensure_exists()
 
-    updated_simpleq = SimpleQ(wait_seconds=5, visibility_timeout=9)
+    updated_simpleq = _live_simpleq(wait_seconds=5, visibility_timeout=9)
     updated_queue = updated_simpleq.queue(
         queue_name,
         dlq=True,
@@ -123,6 +130,59 @@ async def test_live_existing_queue_attributes_are_reconciled() -> None:
 
 @pytest.mark.live
 @pytest.mark.asyncio
+async def test_live_fifo_dlq_redrive_smoke() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=1)
+    queue = simpleq.queue(
+        f"simpleq-live-fifo-dlq-{uuid4().hex[:8]}.fifo",
+        fifo=True,
+        dlq=True,
+        content_based_deduplication=False,
+        wait_seconds=0,
+        visibility_timeout=1,
+    )
+    failing = simpleq.task(
+        queue=queue,
+        message_group_id=lambda value: "customer-1",
+        deduplication_id=lambda value: f"dedup-{value}",
+        max_retries=1,
+    )(tasks.always_fail)
+
+    try:
+        await failing.delay("order-1")
+        worker = simpleq.worker(queues=[queue], concurrency=1, poll_interval=0.1)
+        await worker.work(burst=True)
+
+        dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=5)]
+        assert len(dlq_jobs) == 1
+        assert dlq_jobs[0].args == ("order-1",)
+
+        redriven = await queue.redrive_dlq_jobs(limit=1)
+        assert redriven == 1
+
+        for _ in range(25):
+            received = await queue.receive(max_messages=1, wait_seconds=0)
+            if received:
+                assert received[0].args == ("order-1",)
+                await queue.ack(received[0])
+                break
+        else:
+            raise AssertionError("Redriven FIFO message did not become visible.")
+    finally:
+        await queue.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
 async def test_live_lazy_import_preserves_schema_metadata(
     tmp_path, monkeypatch
 ) -> None:
@@ -143,9 +203,11 @@ async def test_live_lazy_import_preserves_schema_metadata(
         "\n".join(
             [
                 "from simpleq import SimpleQ",
+                "from unittest.mock import patch",
                 "from tests.fixtures.tasks import EmailPayload, LOG",
                 "",
-                "sq = SimpleQ(wait_seconds=0, visibility_timeout=2)",
+                'with patch("simpleq.config.detect_localstack_endpoint", return_value=None):',
+                "    sq = SimpleQ(wait_seconds=0, visibility_timeout=2)",
                 f'queue = sq.queue("{queue_name}", wait_seconds=0)',
                 "",
                 "@sq.task(queue=queue, schema=EmailPayload, max_retries=2)",
@@ -161,7 +223,7 @@ async def test_live_lazy_import_preserves_schema_metadata(
     importlib.invalidate_caches()
 
     module = importlib.import_module(module_name)
-    worker_simpleq = SimpleQ(wait_seconds=0, visibility_timeout=2)
+    worker_simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
 
     try:
         await module.send_email.delay(

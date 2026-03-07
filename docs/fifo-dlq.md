@@ -18,6 +18,10 @@ Rules to remember:
 - FIFO queue names must end with `.fifo`
 - every message needs a `message_group_id`
 - if content-based deduplication is disabled, every message also needs a `deduplication_id`
+- SimpleQ preserves FIFO routing metadata when a message is received, moved to a
+  DLQ, or redriven back to the primary queue
+- redriven FIFO messages get a fresh internal deduplication ID so AWS does not
+  drop them inside the five-minute deduplication window
 
 ## DLQs
 

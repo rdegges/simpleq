@@ -8,6 +8,7 @@ SimpleQ is the Python task queue for AWS SQS: async-first, SQS-native, and inten
 
 - Native SQS support instead of a lowest-common-denominator broker abstraction
 - First-class FIFO queues, DLQs, long polling, batching, and visibility heartbeats
+- FIFO DLQ redrive that preserves message groups and rotates deduplication IDs safely
 - Pydantic-backed task payload validation
 - Sync wrappers for enqueueing and workers when you do not want to manage an event loop
 - LocalStack-friendly local development with a built-in in-memory transport for tests

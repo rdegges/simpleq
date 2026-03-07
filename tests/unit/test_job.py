@@ -31,7 +31,11 @@ def test_job_from_sqs_message_extracts_attributes() -> None:
         ).to_message_body(),
         "ReceiptHandle": "abc",
         "MessageId": "mid",
-        "Attributes": {"ApproximateReceiveCount": "2"},
+        "Attributes": {
+            "ApproximateReceiveCount": "2",
+            "MessageGroupId": "group-1",
+            "MessageDeduplicationId": "dedup-1",
+        },
         "MessageAttributes": {
             "source": {"DataType": "String", "StringValue": "tests"},
         },
@@ -41,6 +45,8 @@ def test_job_from_sqs_message_extracts_attributes() -> None:
     assert restored.message_id == "mid"
     assert restored.receive_count == 2
     assert restored.message_attributes == {"source": "tests"}
+    assert restored.metadata["message_group_id"] == "group-1"
+    assert restored.metadata["deduplication_id"] == "dedup-1"
 
 
 def test_job_with_attempt_copies_error_metadata() -> None:

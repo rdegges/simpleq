@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from simpleq._sync import run_sync
 from simpleq.exceptions import QueueValidationError
-from simpleq.job import Job
+from simpleq.job import (
+    DEDUPLICATION_METADATA_KEY,
+    LEGACY_DEDUPLICATION_METADATA_KEY,
+    LEGACY_MESSAGE_GROUP_METADATA_KEY,
+    MESSAGE_GROUP_METADATA_KEY,
+    Job,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
@@ -172,20 +178,27 @@ class Queue:
         attributes: dict[str, str] | None = None,
     ) -> str:
         """Enqueue a single job."""
+        resolved_group_id = message_group_id or routing_message_group_id(job)
+        resolved_deduplication_id = deduplication_id or routing_deduplication_id(job)
         self._validate_message_options(
             delay_seconds=delay_seconds,
-            message_group_id=message_group_id,
-            deduplication_id=deduplication_id,
+            message_group_id=resolved_group_id,
+            deduplication_id=resolved_deduplication_id,
         )
         queue_url = await self.ensure_exists()
+        prepared_job = persist_routing_metadata(
+            job,
+            message_group_id=resolved_group_id,
+            deduplication_id=resolved_deduplication_id,
+        )
         message_attributes = encode_message_attributes(attributes)
         message_id = await self.simpleq.transport.send_message(
             self.name,
             queue_url,
-            message_body=job.to_message_body(),
+            message_body=prepared_job.to_message_body(),
             delay_seconds=None if self.fifo else delay_seconds,
-            message_group_id=message_group_id,
-            deduplication_id=deduplication_id,
+            message_group_id=resolved_group_id,
+            deduplication_id=resolved_deduplication_id,
             message_attributes=message_attributes,
         )
         self.simpleq.cost_tracker.job_enqueued(self.name)
@@ -202,21 +215,32 @@ class Queue:
         queue_url = await self.ensure_exists()
         payloads: list[dict[str, Any]] = []
         for entry in entries:
+            resolved_group_id = (
+                entry.message_group_id or routing_message_group_id(entry.job)
+            )
+            resolved_deduplication_id = (
+                entry.deduplication_id or routing_deduplication_id(entry.job)
+            )
             self._validate_message_options(
                 delay_seconds=entry.delay_seconds,
-                message_group_id=entry.message_group_id,
-                deduplication_id=entry.deduplication_id,
+                message_group_id=resolved_group_id,
+                deduplication_id=resolved_deduplication_id,
+            )
+            prepared_job = persist_routing_metadata(
+                entry.job,
+                message_group_id=resolved_group_id,
+                deduplication_id=resolved_deduplication_id,
             )
             payload: dict[str, Any] = {
                 "Id": uuid4().hex,
-                "MessageBody": entry.job.to_message_body(),
+                "MessageBody": prepared_job.to_message_body(),
             }
             if not self.fifo and entry.delay_seconds:
                 payload["DelaySeconds"] = entry.delay_seconds
-            if entry.message_group_id is not None:
-                payload["MessageGroupId"] = entry.message_group_id
-            if entry.deduplication_id is not None:
-                payload["MessageDeduplicationId"] = entry.deduplication_id
+            if resolved_group_id is not None:
+                payload["MessageGroupId"] = resolved_group_id
+            if resolved_deduplication_id is not None:
+                payload["MessageDeduplicationId"] = resolved_deduplication_id
             if entry.attributes:
                 payload["MessageAttributes"] = encode_message_attributes(
                     entry.attributes
@@ -374,8 +398,8 @@ class Queue:
             requeued = job.with_attempt(0)
             await self.enqueue(
                 requeued,
-                message_group_id=string_metadata(job.metadata.get("message_group_id")),
-                deduplication_id=string_metadata(job.metadata.get("deduplication_id")),
+                message_group_id=routing_message_group_id(job),
+                deduplication_id=next_deduplication_id(self, job, reason="redrive"),
                 attributes=job.message_attributes,
             )
             await dlq_queue.ack(job)
@@ -398,8 +422,8 @@ class Queue:
         failed_job = job.with_attempt(job.receive_count, error=error)
         await dlq_queue.enqueue(
             failed_job,
-            message_group_id=string_metadata(job.metadata.get("message_group_id")),
-            deduplication_id=string_metadata(job.metadata.get("deduplication_id")),
+            message_group_id=routing_message_group_id(job),
+            deduplication_id=next_deduplication_id(self, job, reason="dlq"),
             attributes=job.message_attributes,
         )
         await self.ack(job)
@@ -462,3 +486,93 @@ def string_metadata(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def routing_message_group_id(job: Job) -> str | None:
+    """Return the persisted FIFO message group ID for a job."""
+    return first_metadata_value(
+        job.metadata,
+        MESSAGE_GROUP_METADATA_KEY,
+        LEGACY_MESSAGE_GROUP_METADATA_KEY,
+    )
+
+
+def routing_deduplication_id(job: Job) -> str | None:
+    """Return the persisted FIFO deduplication ID for a job."""
+    return first_metadata_value(
+        job.metadata,
+        DEDUPLICATION_METADATA_KEY,
+        LEGACY_DEDUPLICATION_METADATA_KEY,
+    )
+
+
+def persist_routing_metadata(
+    job: Job,
+    *,
+    message_group_id: str | None,
+    deduplication_id: str | None,
+) -> Job:
+    """Persist FIFO routing metadata into the serialized job body."""
+    metadata = dict(job.metadata)
+    changed = persist_metadata_value(
+        metadata,
+        MESSAGE_GROUP_METADATA_KEY,
+        message_group_id,
+    )
+    changed = (
+        persist_metadata_value(
+            metadata,
+            LEGACY_MESSAGE_GROUP_METADATA_KEY,
+            message_group_id,
+        )
+        or changed
+    )
+    changed = (
+        persist_metadata_value(
+            metadata,
+            DEDUPLICATION_METADATA_KEY,
+            deduplication_id,
+        )
+        or changed
+    )
+    changed = (
+        persist_metadata_value(
+            metadata,
+            LEGACY_DEDUPLICATION_METADATA_KEY,
+            deduplication_id,
+        )
+        or changed
+    )
+    if not changed:
+        return job
+    return replace(job, metadata=metadata)
+
+
+def persist_metadata_value(
+    metadata: dict[str, Any],
+    key: str,
+    value: str | None,
+) -> bool:
+    """Store a string metadata value when the key is not already set."""
+    if key in metadata or value is None:
+        return False
+    metadata[key] = value
+    return True
+
+
+def first_metadata_value(metadata: dict[str, Any], *keys: str) -> str | None:
+    """Return the first non-null metadata value for the provided keys."""
+    for key in keys:
+        value = string_metadata(metadata.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def next_deduplication_id(queue: Queue, job: Job, *, reason: str) -> str | None:
+    """Return a fresh FIFO deduplication ID for internal requeue operations."""
+    if not queue.fifo:
+        return None
+    if queue.content_based_deduplication:
+        return routing_deduplication_id(job)
+    return f"simpleq-{reason}-{job.job_id}-{uuid4().hex}"

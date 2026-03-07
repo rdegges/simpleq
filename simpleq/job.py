@@ -10,6 +10,11 @@ from uuid import uuid4
 
 from simpleq.serializers import JSONValue, get_serializer
 
+MESSAGE_GROUP_METADATA_KEY = "_simpleq_message_group_id"
+DEDUPLICATION_METADATA_KEY = "_simpleq_deduplication_id"
+LEGACY_MESSAGE_GROUP_METADATA_KEY = "message_group_id"
+LEGACY_DEDUPLICATION_METADATA_KEY = "deduplication_id"
+
 
 def utcnow() -> datetime:
     """Return a timezone-aware UTC timestamp."""
@@ -105,6 +110,7 @@ class Job:
         )
         if job.queue_name != queue_name:
             job.queue_name = queue_name
+        _attach_system_routing_metadata(job, system_attributes)
         return job
 
     def with_attempt(self, attempt: int, *, error: str | None = None) -> Job:
@@ -113,3 +119,52 @@ class Job:
         if error is not None:
             metadata["last_error"] = error
         return replace(self, attempt=attempt, metadata=metadata)
+
+
+def _attach_system_routing_metadata(job: Job, system_attributes: Any) -> None:
+    """Persist FIFO routing metadata from SQS system attributes when available."""
+    if not isinstance(system_attributes, dict):
+        return
+
+    metadata = dict(job.metadata)
+    changed = _set_metadata_if_missing(
+        metadata,
+        MESSAGE_GROUP_METADATA_KEY,
+        system_attributes.get("MessageGroupId"),
+    )
+    changed = (
+        _set_metadata_if_missing(
+            metadata,
+            LEGACY_MESSAGE_GROUP_METADATA_KEY,
+            system_attributes.get("MessageGroupId"),
+        )
+        or changed
+    )
+    changed = (
+        _set_metadata_if_missing(
+            metadata,
+            DEDUPLICATION_METADATA_KEY,
+            system_attributes.get("MessageDeduplicationId"),
+        )
+        or changed
+    )
+    changed = (
+        _set_metadata_if_missing(
+            metadata,
+            LEGACY_DEDUPLICATION_METADATA_KEY,
+            system_attributes.get("MessageDeduplicationId"),
+        )
+        or changed
+    )
+    if changed:
+        job.metadata = metadata
+
+
+def _set_metadata_if_missing(
+    metadata: dict[str, JSONValue], key: str, value: Any
+) -> bool:
+    """Store a stringified metadata value when the key is not already set."""
+    if key in metadata or value is None:
+        return False
+    metadata[key] = str(value)
+    return True

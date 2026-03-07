@@ -96,6 +96,11 @@ def process_order(order_id: str) -> None:
     print(order_id)
 ```
 
+When a FIFO job is moved to the DLQ or redriven back to the primary queue,
+SimpleQ preserves the original `message_group_id` automatically and issues a
+fresh deduplication ID for the internal requeue so SQS does not suppress the
+message inside the five-minute FIFO deduplication window.
+
 ## CLI workflow
 
 ```bash
