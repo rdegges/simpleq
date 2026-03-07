@@ -1,0 +1,249 @@
+"""Additional queue behavior tests using a fake transport."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from simpleq import SimpleQ
+from simpleq.exceptions import QueueValidationError
+from simpleq.job import Job
+from simpleq.queue import BatchEntry
+
+
+class FakeTransport:
+    """Minimal transport stub for queue unit tests."""
+
+    def __init__(self) -> None:
+        self.ensured: list[tuple[str, dict[str, str], dict[str, str]]] = []
+        self.deleted: list[str] = []
+        self.purged: list[str] = []
+        self.sent: list[dict[str, Any]] = []
+        self.sent_batches: list[list[dict[str, Any]]] = []
+        self.deleted_messages: list[str] = []
+        self.visibility_changes: list[int] = []
+        self.receive_queue: list[list[dict[str, Any]]] = []
+
+    async def ensure_queue(
+        self,
+        name: str,
+        *,
+        attributes: dict[str, str] | None = None,
+        tags: dict[str, str] | None = None,
+    ) -> str:
+        self.ensured.append((name, attributes or {}, tags or {}))
+        return f"https://example.com/{name}"
+
+    async def queue_arn(self, name: str, queue_url: str) -> str:
+        return f"arn:aws:sqs:us-east-1:000000000000:{name}"
+
+    async def delete_queue(self, queue_name: str, queue_url: str) -> None:
+        self.deleted.append(queue_name)
+
+    async def purge_queue(self, queue_name: str, queue_url: str) -> None:
+        self.purged.append(queue_name)
+
+    async def send_message(self, queue_name: str, queue_url: str, **kwargs: Any) -> str:
+        self.sent.append({"queue_name": queue_name, **kwargs})
+        return "mid"
+
+    async def send_message_batch(
+        self, queue_name: str, queue_url: str, entries: list[dict[str, Any]]
+    ) -> list[str]:
+        self.sent_batches.append(entries)
+        return [f"mid-{index}" for index, _entry in enumerate(entries, start=1)]
+
+    async def receive_messages(
+        self, queue_name: str, queue_url: str, **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        return self.receive_queue.pop(0) if self.receive_queue else []
+
+    async def delete_message(
+        self, queue_name: str, queue_url: str, receipt_handle: str
+    ) -> None:
+        self.deleted_messages.append(receipt_handle)
+
+    async def change_message_visibility(
+        self, queue_name: str, queue_url: str, receipt_handle: str, timeout_seconds: int
+    ) -> None:
+        self.visibility_changes.append(timeout_seconds)
+
+    async def get_queue_attributes(
+        self, queue_name: str, queue_url: str, attribute_names: list[str]
+    ) -> dict[str, str]:
+        if "QueueArn" in attribute_names:
+            return {"QueueArn": f"arn:aws:sqs:us-east-1:000000000000:{queue_name}"}
+        return {
+            "ApproximateNumberOfMessages": "2",
+            "ApproximateNumberOfMessagesNotVisible": "1",
+            "ApproximateNumberOfMessagesDelayed": "0",
+        }
+
+
+@pytest.fixture
+def simpleq_with_fake_transport() -> SimpleQ:
+    simpleq = SimpleQ()
+    simpleq.transport = FakeTransport()
+    return simpleq
+
+
+@pytest.mark.asyncio
+async def test_queue_ensure_exists_delete_and_purge(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", dlq=True, wait_seconds=0)
+    await queue.ensure_exists()
+    await queue.ensure_exists()
+    assert [
+        name
+        for name, _attributes, _tags in simpleq_with_fake_transport.transport.ensured
+    ] == [
+        "emails-dlq",
+        "emails",
+    ]
+    await queue.purge()
+    await queue.delete()
+    assert simpleq_with_fake_transport.transport.purged == ["emails"]
+    assert simpleq_with_fake_transport.transport.deleted == ["emails", "emails-dlq"]
+
+
+@pytest.mark.asyncio
+async def test_queue_enqueue_receive_and_iter_jobs(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", wait_seconds=0)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="emails",
+    )
+    await queue.enqueue(job, delay_seconds=3, attributes={"source": "tests"})
+    assert simpleq_with_fake_transport.transport.sent[0]["delay_seconds"] == 3
+
+    message = {
+        "Body": job.to_message_body(),
+        "ReceiptHandle": "receipt-1",
+        "MessageId": "mid-1",
+        "Attributes": {"ApproximateReceiveCount": "1"},
+        "MessageAttributes": {},
+    }
+    simpleq_with_fake_transport.transport.receive_queue = [[message], []]
+    received = await queue.receive(max_messages=1, wait_seconds=0)
+    assert received[0].receipt_handle == "receipt-1"
+    await queue.ack(received[0])
+    await queue.change_visibility(received[0], 4)
+    assert simpleq_with_fake_transport.transport.deleted_messages == ["receipt-1"]
+    assert simpleq_with_fake_transport.transport.visibility_changes == [4]
+
+    simpleq_with_fake_transport.transport.receive_queue = [[message], []]
+    iterated = [job async for job in queue.iter_jobs(limit=1)]
+    assert len(iterated) == 1
+
+
+@pytest.mark.asyncio
+async def test_queue_batch_dlq_and_misc_branches(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", dlq=True, wait_seconds=0)
+    base_job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="emails",
+    )
+    await queue.enqueue_many([])
+    await queue.enqueue_many(
+        [
+            BatchEntry(
+                base_job,
+                delay_seconds=1,
+                message_group_id="group-1",
+                deduplication_id="dedup-1",
+                attributes={"source": "tests"},
+            )
+        ]
+    )
+    assert len(simpleq_with_fake_transport.transport.sent_batches) == 1
+
+    simpleq_with_fake_transport.transport.receive_queue = [
+        [
+            {
+                "Body": base_job.with_attempt(2, error="boom").to_message_body(),
+                "ReceiptHandle": "receipt-dlq",
+                "MessageId": "mid-dlq",
+                "Attributes": {"ApproximateReceiveCount": "2"},
+                "MessageAttributes": {},
+            }
+        ],
+        [],
+    ]
+    dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=1)]
+    assert len(dlq_jobs) == 1
+
+    simpleq_with_fake_transport.transport.receive_queue = [
+        [
+            {
+                "Body": base_job.with_attempt(2, error="boom").to_message_body(),
+                "ReceiptHandle": "receipt-redrive",
+                "MessageId": "mid-redrive",
+                "Attributes": {"ApproximateReceiveCount": "1"},
+                "MessageAttributes": {},
+            }
+        ],
+        [],
+    ]
+    assert await queue.redrive_dlq_jobs() == 1
+    assert "receipt-redrive" in simpleq_with_fake_transport.transport.deleted_messages
+
+    no_dlq = simpleq_with_fake_transport.queue("plain", wait_seconds=0)
+    with pytest.raises(QueueValidationError):
+        [job async for job in no_dlq.get_dlq_jobs(limit=1)]
+    with pytest.raises(QueueValidationError):
+        await no_dlq.redrive_dlq_jobs()
+
+    job_without_receipt = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="plain",
+    )
+    await no_dlq.ack(job_without_receipt)
+    await no_dlq.change_visibility(job_without_receipt, 0)
+    await no_dlq.move_to_dlq(job_without_receipt, error="no-dlq")
+    assert (
+        simpleq_with_fake_transport.transport.deleted_messages.count("receipt-redrive")
+        == 1
+    )
+
+    assert await queue.stats() == queue.stats_sync()
+    assert (
+        queue._create_queue_attributes(
+            fifo=True, content_based_deduplication=False, dlq_arn="arn"
+        )["FifoQueue"]
+        == "true"
+    )
+    assert queue._create_queue_attributes(
+        fifo=False, content_based_deduplication=False
+    )["VisibilityTimeout"] == str(queue.visibility_timeout)
+    assert queue.batch_size == simpleq_with_fake_transport.config.batch_size
+    assert repr(queue)
+    assert queue.ensure_exists_sync().endswith(queue.name)
+    queue.delete_sync()
+    queue.purge_sync()
+    assert queue.dlq_name == "emails-dlq"
+
+
+def test_queue_string_metadata_and_validation(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    from simpleq.queue import string_metadata
+
+    queue = simpleq_with_fake_transport.queue("emails")
+    with pytest.raises(QueueValidationError):
+        queue._validate_message_options(
+            delay_seconds=-1, message_group_id=None, deduplication_id=None
+        )
+    assert string_metadata(None) is None
+    assert string_metadata(123) == "123"

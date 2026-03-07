@@ -1,0 +1,139 @@
+[build-system]
+requires = ["setuptools>=80.9.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simpleq"
+version = "2.0.0"
+description = "The Python task queue for AWS SQS."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [
+  {name = "Randall Degges", email = "r@rdegges.com"},
+]
+keywords = ["aws", "sqs", "queue", "tasks", "worker", "async"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+urls = {Homepage = "https://github.com/rdegges/simpleq", Documentation = "https://rdegges.github.io/simpleq/", Repository = "https://github.com/rdegges/simpleq", Issues = "https://github.com/rdegges/simpleq/issues", Changelog = "https://github.com/rdegges/simpleq/releases"}
+dependencies = [
+  "boto3>=1.40.0,<2.0.0",
+  "botocore>=1.40.0,<2.0.0",
+  "cloudpickle>=3.1.1,<4.0.0",
+  "pydantic>=2.11.0,<3.0.0",
+  "structlog>=25.4.0,<26.0.0",
+  "typer>=0.19.2,<1.0.0",
+  "jinja2>=3.1.6,<4.0.0",
+  "prometheus-client>=0.23.1,<1.0.0",
+  "rich>=14.1.0,<15.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.1,<9.0.0",
+  "pytest-asyncio>=1.1.0,<2.0.0",
+  "pytest-cov>=6.2.1,<7.0.0",
+  "pytest-timeout>=2.4.0,<3.0.0",
+  "coverage>=7.10.6,<8.0.0",
+  "mypy>=1.18.2,<2.0.0",
+  "ruff>=0.12.12,<1.0.0",
+  "boto3-stubs[sqs]>=1.40.0,<2.0.0",
+  "types-Jinja2>=2.11.9",
+]
+observability = [
+  "opentelemetry-api>=1.38.0,<2.0.0",
+  "aws-xray-sdk>=2.15.0,<3.0.0",
+]
+dashboard = [
+  "httpx>=0.28.1,<1.0.0",
+]
+docs = [
+  "mkdocs-material>=9.6.20,<10.0.0",
+  "mkdocstrings[python]>=0.30.0,<1.0.0",
+  "mike>=2.1.3,<3.0.0",
+]
+
+[project.scripts]
+simpleq = "simpleq.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["simpleq*"]
+
+[tool.setuptools.package-data]
+simpleq = ["py.typed"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "W",
+  "F",
+  "I",
+  "B",
+  "C4",
+  "UP",
+  "ARG",
+  "SIM",
+  "TCH",
+  "PERF",
+]
+ignore = [
+  "E501",
+  "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "S101"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+  "integration: integration tests that exercise LocalStack",
+  "live: tests that exercise real AWS resources",
+  "performance: performance and benchmark tests",
+]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+branch = true
+source = ["simpleq"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

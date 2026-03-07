@@ -1,0 +1,220 @@
+"""Primary SimpleQ client and public entrypoint."""
+
+from __future__ import annotations
+
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    ParamSpec,
+    TypeVar,
+    cast,
+)
+
+from simpleq._sync import run_sync
+from simpleq.config import BackoffStrategy, SimpleQConfig
+from simpleq.exceptions import QueueValidationError
+from simpleq.observability import CostTracker, PrometheusMetrics, configure_logging
+from simpleq.queue import Queue
+from simpleq.sqs import SQSClient
+from simpleq.task import TaskDefinition, TaskHandle, TaskRegistry, task_name_for
+from simpleq.worker import Worker
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
+    from pydantic import BaseModel
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+class SimpleQ:
+    """The main application entrypoint for SimpleQ."""
+
+    def __init__(
+        self,
+        *,
+        region: str | None = None,
+        endpoint_url: str | None = None,
+        batch_size: int | None = None,
+        wait_seconds: int | None = None,
+        visibility_timeout: int | None = None,
+        concurrency: int | None = None,
+        graceful_shutdown_timeout: int | None = None,
+        max_retries: int | None = None,
+        backoff_strategy: BackoffStrategy | None = None,
+        enable_cost_tracking: bool | None = None,
+        enable_metrics: bool | None = None,
+        enable_tracing: bool | None = None,
+        log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] | None = None,
+        sqs_price_per_million: float | None = None,
+        default_queue_name: str | None = None,
+        transport: Any | None = None,
+        session_factory: Callable[[], Any] | None = None,
+    ) -> None:
+        self.config = SimpleQConfig.from_overrides(
+            region=region,
+            endpoint_url=endpoint_url,
+            batch_size=batch_size,
+            wait_seconds=wait_seconds,
+            visibility_timeout=visibility_timeout,
+            concurrency=concurrency,
+            graceful_shutdown_timeout=graceful_shutdown_timeout,
+            max_retries=max_retries,
+            backoff_strategy=backoff_strategy,
+            enable_cost_tracking=enable_cost_tracking,
+            enable_metrics=enable_metrics,
+            enable_tracing=enable_tracing,
+            log_level=log_level,
+            sqs_price_per_million=sqs_price_per_million,
+            default_queue_name=default_queue_name,
+        )
+        self.cost_tracker = CostTracker(
+            price_per_million=self.config.sqs_price_per_million
+        )
+        self.metrics = PrometheusMetrics()
+        self.logger = configure_logging(self.config.log_level)
+        self.registry = TaskRegistry()
+        self._transport = transport
+        self._session_factory = session_factory
+        self._queues: dict[tuple[str, bool, bool], Queue] = {}
+
+    @property
+    def transport(self) -> Any:
+        """Return the configured transport, creating the default lazily."""
+        if self._transport is None:
+            self._transport = SQSClient(
+                self.config,
+                self.cost_tracker,
+                session_factory=self._session_factory,
+            )
+        return self._transport
+
+    @transport.setter
+    def transport(self, value: Any) -> None:
+        """Override the transport used for queue operations."""
+        self._transport = value
+
+    def queue(
+        self,
+        name: str,
+        *,
+        fifo: bool = False,
+        dlq: bool = False,
+        max_retries: int = 3,
+        content_based_deduplication: bool = False,
+        visibility_timeout: int | None = None,
+        wait_seconds: int | None = None,
+        tags: dict[str, str] | None = None,
+    ) -> Queue:
+        """Create or return a cached queue object."""
+        key = (name, fifo, dlq)
+        if key not in self._queues:
+            self._queues[key] = Queue(
+                self,
+                name,
+                fifo=fifo,
+                dlq=dlq,
+                max_retries=max_retries,
+                content_based_deduplication=content_based_deduplication,
+                visibility_timeout=visibility_timeout,
+                wait_seconds=wait_seconds,
+                tags=tags,
+            )
+        return self._queues[key]
+
+    def _configured_queues(self, name: str) -> list[Queue]:
+        """Return cached queue objects for the given queue name."""
+        return [queue for queue in self._queues.values() if queue.name == name]
+
+    def _clone_queue(self, queue: Queue) -> Queue:
+        """Rebuild a queue onto this client while preserving its configuration."""
+        return self.queue(
+            queue.name,
+            fifo=queue.fifo,
+            dlq=queue.dlq,
+            max_retries=queue.max_retries,
+            content_based_deduplication=queue.content_based_deduplication,
+            visibility_timeout=queue.visibility_timeout,
+            wait_seconds=queue.wait_seconds,
+            tags=dict(queue.tags),
+        )
+
+    def resolve_queue(self, queue_ref: Any | None) -> Queue:
+        """Resolve a queue reference into a Queue instance."""
+        if queue_ref is None:
+            return self.queue(self.config.default_queue_name)
+        if isinstance(queue_ref, Queue):
+            if queue_ref.simpleq is self:
+                return queue_ref
+            return self._clone_queue(queue_ref)
+        if isinstance(queue_ref, str):
+            matches = self._configured_queues(queue_ref)
+            if len(matches) == 1:
+                return matches[0]
+            if len(matches) > 1:
+                raise QueueValidationError(
+                    f"Queue name '{queue_ref}' is ambiguous. Reuse the Queue instance instead."
+                )
+            return self.queue(queue_ref, fifo=queue_ref.endswith(".fifo"))
+        return cast("Queue", queue_ref)
+
+    def task(
+        self,
+        *,
+        queue: Queue | str | None = None,
+        serializer: str = "json",
+        schema: type[BaseModel] | None = None,
+        message_group_id: str | Callable[..., str] | None = None,
+        deduplication_id: str | Callable[..., str] | None = None,
+        retry_exceptions: Sequence[type[BaseException]] | None = None,
+        max_retries: int | None = None,
+    ) -> Callable[[Callable[P, R]], TaskHandle[P, R]]:
+        """Register a function as a SimpleQ task."""
+
+        def decorator(func: Callable[P, R]) -> TaskHandle[P, R]:
+            definition = TaskDefinition(
+                name=task_name_for(func),
+                func=func,
+                queue_ref=queue,
+                serializer=serializer,
+                schema=schema,
+                message_group_id=message_group_id,
+                deduplication_id=deduplication_id,
+                retry_exceptions=tuple(retry_exceptions) if retry_exceptions else None,
+                max_retries=max_retries,
+            )
+            self.registry.register(definition)
+            return TaskHandle(self, definition)
+
+        return decorator
+
+    def worker(
+        self,
+        *,
+        queues: Sequence[Queue | str],
+        concurrency: int | None = None,
+        poll_interval: float = 1.0,
+    ) -> Worker:
+        """Create a worker for the specified queues."""
+        resolved_queues = [self.resolve_queue(queue) for queue in queues]
+        return Worker(
+            self,
+            resolved_queues,
+            concurrency=concurrency or self.config.concurrency,
+            poll_interval=poll_interval,
+        )
+
+    async def list_queues(self, prefix: str | None = None) -> list[str]:
+        """List SQS queue names, optionally filtered by prefix."""
+        urls = await self.transport.list_queues(prefix)
+        return [url.rsplit("/", 1)[-1] for url in urls]
+
+    def list_queues_sync(self, prefix: str | None = None) -> list[str]:
+        """Synchronous wrapper for :meth:`list_queues`."""
+        return run_sync(self.list_queues(prefix))
+
+    def run_sync(self, awaitable: Any) -> Any:
+        """Expose the sync helper for CLI callers."""
+        return run_sync(awaitable)

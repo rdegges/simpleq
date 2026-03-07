@@ -1,2 +1,16 @@
 *.egg-info
 .coverage
+.env
+.env.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.python-version
+htmlcov/
+dist/
+build/
+coverage.xml
+site/
+__pycache__/
+*.pyc

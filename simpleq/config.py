@@ -1,0 +1,210 @@
+"""Configuration loading and environment detection for SimpleQ."""
+
+from __future__ import annotations
+
+import os
+import socket
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal, cast
+from urllib.parse import urlparse
+
+BackoffStrategy = Literal["constant", "linear", "exponential"]
+
+
+def _bool_env(name: str) -> bool | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _coalesce_int(explicit: int | None, env_name: str, default: int) -> int:
+    if explicit is not None:
+        return explicit
+    value = os.getenv(env_name)
+    if value is None:
+        return default
+    return int(value)
+
+
+def _coalesce_float(explicit: float | None, env_name: str, default: float) -> float:
+    if explicit is not None:
+        return explicit
+    value = os.getenv(env_name)
+    if value is None:
+        return default
+    return float(value)
+
+
+def _endpoint_reachable(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.hostname is None:
+        return False
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((parsed.hostname, port), timeout=0.1):
+            return True
+    except OSError:
+        return False
+
+
+def detect_localstack_endpoint() -> str | None:
+    """Return a sensible LocalStack endpoint for dev and CI environments."""
+    if endpoint := os.getenv("SIMPLEQ_ENDPOINT_URL"):
+        return endpoint
+
+    if hostname := os.getenv("LOCALSTACK_HOSTNAME"):
+        return f"http://{hostname}:4566"
+
+    env_name = os.getenv("SIMPLEQ_ENV", "").strip().lower()
+    inside_docker = Path("/.dockerenv").exists()
+
+    if os.getenv("CI"):
+        return "http://localhost:4566"
+
+    if env_name == "test":
+        return "http://localhost:4566"
+
+    if inside_docker and env_name in {"development", "dev", "test"}:
+        return "http://localstack:4566"
+
+    if _endpoint_reachable("http://localhost:4566"):
+        return "http://localhost:4566"
+
+    if inside_docker and _endpoint_reachable("http://localstack:4566"):
+        return "http://localstack:4566"
+
+    return None
+
+
+@dataclass(slots=True)
+class SimpleQConfig:
+    """Resolved runtime configuration for SimpleQ."""
+
+    region: str = "us-east-1"
+    endpoint_url: str | None = None
+    batch_size: int = 10
+    wait_seconds: int = 20
+    visibility_timeout: int = 300
+    concurrency: int = 10
+    graceful_shutdown_timeout: int = 30
+    max_retries: int = 3
+    backoff_strategy: BackoffStrategy = "exponential"
+    enable_cost_tracking: bool = True
+    enable_metrics: bool = True
+    enable_tracing: bool = False
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    sqs_price_per_million: float = 0.40
+    default_queue_name: str = "default"
+
+    @classmethod
+    def from_overrides(
+        cls,
+        *,
+        region: str | None = None,
+        endpoint_url: str | None = None,
+        batch_size: int | None = None,
+        wait_seconds: int | None = None,
+        visibility_timeout: int | None = None,
+        concurrency: int | None = None,
+        graceful_shutdown_timeout: int | None = None,
+        max_retries: int | None = None,
+        backoff_strategy: BackoffStrategy | None = None,
+        enable_cost_tracking: bool | None = None,
+        enable_metrics: bool | None = None,
+        enable_tracing: bool | None = None,
+        log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] | None = None,
+        sqs_price_per_million: float | None = None,
+        default_queue_name: str | None = None,
+    ) -> SimpleQConfig:
+        """Resolve configuration using explicit values, then env vars, then defaults."""
+        config = cls()
+
+        config.region = (
+            region
+            or os.getenv("AWS_REGION")
+            or os.getenv("AWS_DEFAULT_REGION")
+            or config.region
+        )
+        config.endpoint_url = endpoint_url or detect_localstack_endpoint()
+        config.batch_size = _coalesce_int(
+            batch_size, "SIMPLEQ_BATCH_SIZE", config.batch_size
+        )
+        config.wait_seconds = _coalesce_int(
+            wait_seconds, "SIMPLEQ_WAIT_SECONDS", config.wait_seconds
+        )
+        config.visibility_timeout = _coalesce_int(
+            visibility_timeout,
+            "SIMPLEQ_VISIBILITY_TIMEOUT",
+            config.visibility_timeout,
+        )
+        config.concurrency = _coalesce_int(
+            concurrency, "SIMPLEQ_CONCURRENCY", config.concurrency
+        )
+        config.graceful_shutdown_timeout = _coalesce_int(
+            graceful_shutdown_timeout,
+            "SIMPLEQ_GRACEFUL_SHUTDOWN_TIMEOUT",
+            config.graceful_shutdown_timeout,
+        )
+        config.max_retries = _coalesce_int(
+            max_retries, "SIMPLEQ_MAX_RETRIES", config.max_retries
+        )
+        config.backoff_strategy = cast_backoff_strategy(
+            backoff_strategy
+            or os.getenv("SIMPLEQ_BACKOFF_STRATEGY")
+            or config.backoff_strategy
+        )
+        config.enable_cost_tracking = resolve_bool(
+            explicit=enable_cost_tracking,
+            env_name="SIMPLEQ_COST_TRACKING",
+            default=config.enable_cost_tracking,
+        )
+        config.enable_metrics = resolve_bool(
+            explicit=enable_metrics,
+            env_name="SIMPLEQ_ENABLE_METRICS",
+            default=config.enable_metrics,
+        )
+        config.enable_tracing = resolve_bool(
+            explicit=enable_tracing,
+            env_name="SIMPLEQ_ENABLE_TRACING",
+            default=config.enable_tracing,
+        )
+        config.log_level = cast_log_level(
+            log_level or os.getenv("SIMPLEQ_LOG_LEVEL") or config.log_level
+        )
+        config.sqs_price_per_million = _coalesce_float(
+            sqs_price_per_million,
+            "SIMPLEQ_SQS_PRICE_PER_MILLION",
+            config.sqs_price_per_million,
+        )
+        config.default_queue_name = (
+            default_queue_name
+            or os.getenv("SIMPLEQ_DEFAULT_QUEUE")
+            or config.default_queue_name
+        )
+        return config
+
+
+def resolve_bool(*, explicit: bool | None, env_name: str, default: bool) -> bool:
+    """Resolve a boolean from explicit input, env, and a default."""
+    if explicit is not None:
+        return explicit
+    from_env = _bool_env(env_name)
+    if from_env is None:
+        return default
+    return from_env
+
+
+def cast_backoff_strategy(value: str) -> BackoffStrategy:
+    """Validate a backoff strategy string."""
+    if value not in {"constant", "linear", "exponential"}:
+        raise ValueError(f"Unsupported backoff strategy: {value}")
+    return cast("BackoffStrategy", value)
+
+
+def cast_log_level(value: str) -> Literal["DEBUG", "INFO", "WARNING", "ERROR"]:
+    """Validate a log level string."""
+    if value not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
+        raise ValueError(f"Unsupported log level: {value}")
+    return cast("Literal['DEBUG', 'INFO', 'WARNING', 'ERROR']", value)
