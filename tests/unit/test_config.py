@@ -88,6 +88,8 @@ def test_resolve_bool_and_cast_log_level(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("FEATURE_FLAG", "true")
     assert resolve_bool(explicit=None, env_name="FEATURE_FLAG", default=False) is True
     assert resolve_bool(explicit=False, env_name="FEATURE_FLAG", default=True) is False
+    monkeypatch.setenv("FEATURE_FLAG", "off")
+    assert resolve_bool(explicit=None, env_name="FEATURE_FLAG", default=True) is False
     assert cast_log_level("ERROR") == "ERROR"
     with pytest.raises(ValueError):
         cast_log_level("TRACE")
@@ -104,3 +106,11 @@ def test_numeric_env_and_explicit_float_overrides(
 
     explicit = SimpleQConfig.from_overrides(sqs_price_per_million=0.2)
     assert explicit.sqs_price_per_million == 0.2
+
+
+def test_from_overrides_rejects_invalid_boolean_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_ENABLE_METRICS", "maybe")
+    with pytest.raises(ValueError, match="Unsupported boolean value"):
+        SimpleQConfig.from_overrides()

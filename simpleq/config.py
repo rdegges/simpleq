@@ -16,7 +16,15 @@ def _bool_env(name: str) -> bool | None:
     value = os.getenv(name)
     if value is None:
         return None
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(
+        f"Unsupported boolean value for {name}: {value!r}. "
+        "Use one of: 1, 0, true, false, yes, no, on, off."
+    )
 
 
 def _coalesce_int(explicit: int | None, env_name: str, default: int) -> int:

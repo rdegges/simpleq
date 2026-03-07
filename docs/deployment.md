@@ -12,6 +12,8 @@ Recommended settings:
 
 - set `SIMPLEQ_CONCURRENCY`
 - set `SIMPLEQ_LOG_LEVEL=INFO`
+- set boolean flags (`SIMPLEQ_ENABLE_METRICS`, `SIMPLEQ_ENABLE_TRACING`,
+  `SIMPLEQ_COST_TRACKING`) with `1/0`, `true/false`, `yes/no`, or `on/off`
 - expose `/metrics` through the dashboard or a sidecar if you scrape Prometheus
 
 ## Lambda producers
