@@ -75,7 +75,9 @@ class Worker:
             try:
                 heartbeat_task = self._heartbeat(queue, job)
                 await self._invoke(queue, job)
-            except BaseException as exc:  # noqa: BLE001
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
                 await self._handle_failure(queue, job, exc)
             else:
                 await queue.ack(job)
