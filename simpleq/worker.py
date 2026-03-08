@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 from simpleq._sync import run_sync
@@ -120,15 +119,41 @@ class Worker:
             finally:
                 if heartbeat_task is not None:
                     heartbeat_task.cancel()
-                    with suppress(asyncio.CancelledError):
+                    try:
                         await heartbeat_task
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as exc:
+                        queue_name = str(getattr(queue, "name", "unknown"))
+                        self.simpleq.logger.warning(
+                            "queue_visibility_heartbeat_shutdown_failed",
+                            queue_name=queue_name,
+                            job_id=str(getattr(job, "job_id", "unknown")),
+                            error=str(exc),
+                        )
 
     def _heartbeat(self, queue: Any, job: Job) -> asyncio.Task[None]:
         async def extend() -> None:
             interval = max(1, queue.visibility_timeout // 2)
             while True:
                 await asyncio.sleep(interval)
-                await queue.change_visibility(job, queue.visibility_timeout)
+                try:
+                    await queue.change_visibility(job, queue.visibility_timeout)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    queue_name = str(getattr(queue, "name", "unknown"))
+                    self.simpleq.logger.warning(
+                        "queue_visibility_heartbeat_failed",
+                        queue_name=queue_name,
+                        job_id=str(getattr(job, "job_id", "unknown")),
+                        error=str(exc),
+                    )
+                    self.simpleq.metrics.record_processed(
+                        queue_name,
+                        status="heartbeat_error",
+                        duration_seconds=0.0,
+                    )
 
         return asyncio.create_task(extend())
 

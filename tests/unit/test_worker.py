@@ -290,3 +290,34 @@ async def test_worker_survives_receive_error_and_processes_other_queues() -> Non
     worker._invoke = invoke_and_mark  # type: ignore[method-assign]
     await asyncio.wait_for(worker.work(burst=True), timeout=0.5)
     await asyncio.wait_for(processed.wait(), timeout=0.15)
+
+
+@pytest.mark.asyncio
+async def test_worker_ignores_heartbeat_task_failures() -> None:
+    simpleq = SimpleQ()
+    definition = TaskDefinition(name=task_name_for(record_sync), func=record_sync)
+    simpleq.registry.register(definition)
+    queue = FakeQueue(simpleq=simpleq)
+    worker = Worker(simpleq, [queue], concurrency=1)
+    job = Job(
+        task_name=definition.name,
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+
+    async def invoke_slowly(_queue: Any, _job: Job) -> None:
+        await asyncio.sleep(0.02)
+
+    def failing_heartbeat(_queue: Any, _job: Job) -> asyncio.Task[None]:
+        async def crash() -> None:
+            await asyncio.sleep(0)
+            raise RuntimeError("heartbeat failed")
+
+        return asyncio.create_task(crash())
+
+    worker._invoke = invoke_slowly  # type: ignore[method-assign]
+    worker._heartbeat = failing_heartbeat  # type: ignore[method-assign]
+
+    await worker._process_job(queue, job, asyncio.Semaphore(1))
+    assert queue.acked == [job.job_id]
