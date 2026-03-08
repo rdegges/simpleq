@@ -8,6 +8,7 @@ import pytest
 
 from simpleq.config import (
     SimpleQConfig,
+    cast_backoff_strategy,
     cast_log_level,
     detect_localstack_endpoint,
     resolve_bool,
@@ -114,6 +115,43 @@ def test_from_overrides_rejects_invalid_boolean_env(
     monkeypatch.setenv("SIMPLEQ_ENABLE_METRICS", "maybe")
     with pytest.raises(ValueError, match="Unsupported boolean value"):
         SimpleQConfig.from_overrides()
+
+
+def test_from_overrides_rejects_invalid_integer_env_with_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_CONCURRENCY", "many")
+
+    with pytest.raises(ValueError, match="Invalid integer for SIMPLEQ_CONCURRENCY"):
+        SimpleQConfig.from_overrides()
+
+
+def test_from_overrides_rejects_invalid_float_env_with_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_SQS_PRICE_PER_MILLION", "cheap")
+
+    with pytest.raises(
+        ValueError, match="Invalid float for SIMPLEQ_SQS_PRICE_PER_MILLION"
+    ):
+        SimpleQConfig.from_overrides()
+
+
+def test_from_overrides_normalizes_case_for_string_enums(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_LOG_LEVEL", "debug")
+    monkeypatch.setenv("SIMPLEQ_BACKOFF_STRATEGY", "LINEAR")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.log_level == "DEBUG"
+    assert config.backoff_strategy == "linear"
+
+
+def test_cast_backoff_strategy_and_log_level_strip_whitespace() -> None:
+    assert cast_backoff_strategy("  exponential  ") == "exponential"
+    assert cast_log_level(" warning ") == "WARNING"
 
 
 @pytest.mark.parametrize(

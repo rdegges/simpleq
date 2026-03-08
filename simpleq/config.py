@@ -53,7 +53,12 @@ def _coalesce_int(explicit: int | None, env_name: str, default: int) -> int:
     value = os.getenv(env_name)
     if value is None:
         return default
-    return int(value)
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid integer for {env_name}: {value!r}."
+        ) from exc
 
 
 def _coalesce_float(explicit: float | None, env_name: str, default: float) -> float:
@@ -62,7 +67,12 @@ def _coalesce_float(explicit: float | None, env_name: str, default: float) -> fl
     value = os.getenv(env_name)
     if value is None:
         return default
-    return float(value)
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid float for {env_name}: {value!r}."
+        ) from exc
 
 
 def _endpoint_reachable(url: str) -> bool:
@@ -257,13 +267,15 @@ def resolve_bool(*, explicit: bool | None, env_name: str, default: bool) -> bool
 
 def cast_backoff_strategy(value: str) -> BackoffStrategy:
     """Validate a backoff strategy string."""
-    if value not in {"constant", "linear", "exponential"}:
+    normalized = value.strip().lower()
+    if normalized not in {"constant", "linear", "exponential"}:
         raise ValueError(f"Unsupported backoff strategy: {value}")
-    return cast("BackoffStrategy", value)
+    return cast("BackoffStrategy", normalized)
 
 
 def cast_log_level(value: str) -> Literal["DEBUG", "INFO", "WARNING", "ERROR"]:
     """Validate a log level string."""
-    if value not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
+    normalized = value.strip().upper()
+    if normalized not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
         raise ValueError(f"Unsupported log level: {value}")
-    return cast("Literal['DEBUG', 'INFO', 'WARNING', 'ERROR']", value)
+    return cast("Literal['DEBUG', 'INFO', 'WARNING', 'ERROR']", normalized)
