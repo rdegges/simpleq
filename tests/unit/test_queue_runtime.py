@@ -145,6 +145,39 @@ async def test_queue_enqueue_receive_and_iter_jobs(
 
 
 @pytest.mark.asyncio
+async def test_queue_receive_skips_and_deletes_malformed_messages(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", wait_seconds=0)
+    valid_job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="emails",
+    )
+    malformed_message = {
+        "Body": "{not-json",
+        "ReceiptHandle": "receipt-bad",
+        "MessageId": "mid-bad",
+        "Attributes": {"ApproximateReceiveCount": "1"},
+        "MessageAttributes": {},
+    }
+    valid_message = {
+        "Body": valid_job.to_message_body(),
+        "ReceiptHandle": "receipt-good",
+        "MessageId": "mid-good",
+        "Attributes": {"ApproximateReceiveCount": "1"},
+        "MessageAttributes": {},
+    }
+    simpleq_with_fake_transport.transport.receive_queue = [[malformed_message, valid_message]]
+
+    received = await queue.receive(max_messages=2, wait_seconds=0)
+
+    assert [job.message_id for job in received] == ["mid-good"]
+    assert simpleq_with_fake_transport.transport.deleted_messages == ["receipt-bad"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("timeout_seconds", [-1, 43_201])
 async def test_queue_change_visibility_rejects_invalid_timeout(
     simpleq_with_fake_transport: SimpleQ,

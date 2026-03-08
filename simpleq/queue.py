@@ -330,7 +330,11 @@ class Queue:
             wait_seconds=resolved_wait_seconds,
             visibility_timeout=visibility_timeout,
         )
-        return [Job.from_sqs_message(self.name, message) for message in messages]
+        decoded = [
+            await self._decode_message(queue_url=queue_url, message=message)
+            for message in messages
+        ]
+        return [job for job in decoded if job is not None]
 
     async def iter_jobs(
         self,
@@ -520,6 +524,65 @@ class Queue:
                 {"deadLetterTargetArn": dlq_arn, "maxReceiveCount": self.max_retries}
             )
         return attributes
+
+    async def _handle_malformed_message(
+        self,
+        *,
+        queue_url: str,
+        message: dict[str, Any],
+        error: Exception,
+    ) -> None:
+        """Log and quarantine malformed messages so they do not poison polling."""
+        message_id = str(message.get("MessageId", "unknown"))
+        receipt_handle = message.get("ReceiptHandle")
+        self.simpleq.logger.error(
+            "queue_message_deserialization_failed",
+            queue_name=self.name,
+            message_id=message_id,
+            error=str(error),
+        )
+        self.simpleq.metrics.record_processed(
+            self.name,
+            status="decode_error",
+            duration_seconds=0.0,
+        )
+        if not isinstance(receipt_handle, str) or not receipt_handle:
+            self.simpleq.logger.warning(
+                "queue_malformed_message_missing_receipt_handle",
+                queue_name=self.name,
+                message_id=message_id,
+            )
+            return
+        try:
+            await self.simpleq.transport.delete_message(
+                self.name,
+                queue_url,
+                receipt_handle,
+            )
+        except Exception as exc:
+            self.simpleq.logger.error(
+                "queue_malformed_message_delete_failed",
+                queue_name=self.name,
+                message_id=message_id,
+                error=str(exc),
+            )
+
+    async def _decode_message(
+        self,
+        *,
+        queue_url: str,
+        message: dict[str, Any],
+    ) -> Job | None:
+        """Deserialize a received message into a Job, handling malformed payloads."""
+        try:
+            return Job.from_sqs_message(self.name, message)
+        except Exception as exc:
+            await self._handle_malformed_message(
+                queue_url=queue_url,
+                message=message,
+                error=exc,
+            )
+            return None
 
     def _validate_message_options(
         self,
