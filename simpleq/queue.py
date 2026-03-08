@@ -22,10 +22,14 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
 
 _QUEUE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+_MESSAGE_ATTRIBUTE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 _MAX_QUEUE_NAME_LENGTH = 80
 _MAX_RECEIVE_MESSAGES = 10
 _MAX_WAIT_SECONDS = 20
 _MAX_VISIBILITY_TIMEOUT = 43_200
+_MAX_MESSAGE_ATTRIBUTES = 10
+_MAX_MESSAGE_ATTRIBUTE_NAME_LENGTH = 256
+_MAX_MESSAGE_ATTRIBUTE_VALUE_LENGTH = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +61,27 @@ def encode_message_attributes(
     """Encode simple string attributes into SQS message attribute shape."""
     if not attributes:
         return {}
+    if len(attributes) > _MAX_MESSAGE_ATTRIBUTES:
+        raise QueueValidationError(
+            f"message attributes support at most {_MAX_MESSAGE_ATTRIBUTES} entries."
+        )
+    for key, value in attributes.items():
+        if not key:
+            raise QueueValidationError("message attribute names must be non-empty.")
+        if len(key) > _MAX_MESSAGE_ATTRIBUTE_NAME_LENGTH:
+            raise QueueValidationError(
+                "message attribute names must be between 1 and 256 characters."
+            )
+        if _MESSAGE_ATTRIBUTE_NAME_PATTERN.fullmatch(key) is None:
+            raise QueueValidationError(
+                "message attribute names may only contain letters, numbers, hyphens, underscores, or periods."
+            )
+        if not isinstance(value, str):
+            raise QueueValidationError("message attribute values must be strings.")
+        if len(value) > _MAX_MESSAGE_ATTRIBUTE_VALUE_LENGTH:
+            raise QueueValidationError(
+                "message attribute values must be at most 256 characters."
+            )
     return {
         key: {"DataType": "String", "StringValue": value}
         for key, value in attributes.items()

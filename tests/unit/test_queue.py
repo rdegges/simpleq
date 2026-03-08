@@ -76,6 +76,38 @@ def test_encode_message_attributes() -> None:
     }
 
 
+def test_encode_message_attributes_rejects_more_than_ten_attributes() -> None:
+    attributes = {f"k{i}": "value" for i in range(11)}
+    with pytest.raises(QueueValidationError, match="at most 10"):
+        encode_message_attributes(attributes)
+
+
+@pytest.mark.parametrize(
+    ("attributes", "message"),
+    [
+        ({"": "value"}, "non-empty"),
+        ({"bad key": "value"}, "letters, numbers, hyphens, underscores, or periods"),
+        ({"k" * 257: "value"}, "between 1 and 256"),
+    ],
+)
+def test_encode_message_attributes_rejects_invalid_attribute_names(
+    attributes: dict[str, str],
+    message: str,
+) -> None:
+    with pytest.raises(QueueValidationError, match=message):
+        encode_message_attributes(attributes)
+
+
+def test_encode_message_attributes_rejects_non_string_value() -> None:
+    with pytest.raises(QueueValidationError, match="must be strings"):
+        encode_message_attributes({"source": "tests", "attempt": 1})  # type: ignore[arg-type]
+
+
+def test_encode_message_attributes_rejects_oversized_values() -> None:
+    with pytest.raises(QueueValidationError, match="at most 256"):
+        encode_message_attributes({"source": "a" * 257})
+
+
 @pytest.mark.asyncio
 async def test_enqueue_many_rejects_large_batches() -> None:
     simpleq = SimpleQ()
