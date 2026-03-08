@@ -35,6 +35,10 @@ Numeric queue/runtime settings are validated eagerly against SQS limits:
 `batch_size`/`max_messages` `1-10`, `wait_seconds` `0-20`,
 `visibility_timeout` `0-43200`, and `concurrency >= 1`.
 
+You can set `default_queue_name` (or `SIMPLEQ_DEFAULT_QUEUE`) to either a
+standard queue (for example `jobs`) or FIFO queue (for example `jobs.fifo`).
+SimpleQ infers queue type from the suffix when resolving the default queue.
+
 ## Quick Start
 
 ```python

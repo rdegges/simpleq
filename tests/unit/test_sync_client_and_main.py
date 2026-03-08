@@ -53,6 +53,15 @@ def test_simpleq_queue_cache_and_resolution(monkeypatch: pytest.MonkeyPatch) -> 
     assert simpleq.resolve_queue(marker) is marker
 
 
+def test_simpleq_resolve_queue_none_supports_fifo_default_queue() -> None:
+    simpleq = SimpleQ(default_queue_name="events.fifo", transport=InMemoryTransport())
+
+    resolved = simpleq.resolve_queue(None)
+
+    assert resolved.name == "events.fifo"
+    assert resolved.fifo is True
+
+
 def test_simpleq_queue_uses_client_default_max_retries() -> None:
     simpleq = SimpleQ(max_retries=7, transport=InMemoryTransport())
 

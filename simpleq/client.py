@@ -177,7 +177,8 @@ class SimpleQ:
     def resolve_queue(self, queue_ref: Any | None) -> Queue:
         """Resolve a queue reference into a Queue instance."""
         if queue_ref is None:
-            return self.queue(self.config.default_queue_name)
+            default_name = self.config.default_queue_name
+            return self.queue(default_name, fifo=default_name.endswith(".fifo"))
         if isinstance(queue_ref, Queue):
             if queue_ref.simpleq is self:
                 return queue_ref
