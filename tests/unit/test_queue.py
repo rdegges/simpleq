@@ -139,9 +139,16 @@ def test_encode_message_attributes_rejects_non_string_value() -> None:
         encode_message_attributes({"source": "tests", "attempt": 1})  # type: ignore[arg-type]
 
 
-def test_encode_message_attributes_rejects_oversized_values() -> None:
-    with pytest.raises(QueueValidationError, match="at most 256"):
-        encode_message_attributes({"source": "a" * 257})
+def test_encode_message_attributes_allows_large_values_within_sqs_limits() -> None:
+    value = "a" * 2048
+    assert encode_message_attributes({"source": value}) == {
+        "source": {"DataType": "String", "StringValue": value}
+    }
+
+
+def test_encode_message_attributes_rejects_values_larger_than_256_kib() -> None:
+    with pytest.raises(QueueValidationError, match="at most 262144 bytes"):
+        encode_message_attributes({"source": "a" * (262_144 + 1)})
 
 
 @pytest.mark.asyncio

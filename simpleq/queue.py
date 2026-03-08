@@ -29,7 +29,7 @@ _MAX_WAIT_SECONDS = 20
 _MAX_VISIBILITY_TIMEOUT = 43_200
 _MAX_MESSAGE_ATTRIBUTES = 10
 _MAX_MESSAGE_ATTRIBUTE_NAME_LENGTH = 256
-_MAX_MESSAGE_ATTRIBUTE_VALUE_LENGTH = 256
+_MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES = 262_144
 _MAX_FIFO_ROUTING_ID_LENGTH = 128
 _MAX_DLQ_MAX_RECEIVE_COUNT = 1000
 
@@ -80,9 +80,9 @@ def encode_message_attributes(
             )
         if not isinstance(value, str):
             raise QueueValidationError("message attribute values must be strings.")
-        if len(value) > _MAX_MESSAGE_ATTRIBUTE_VALUE_LENGTH:
+        if len(value.encode("utf-8")) > _MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES:
             raise QueueValidationError(
-                "message attribute values must be at most 256 characters."
+                "message attribute values must be at most 262144 bytes."
             )
     return {
         key: {"DataType": "String", "StringValue": value}
