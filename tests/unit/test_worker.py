@@ -234,3 +234,59 @@ async def test_worker_processes_ready_queue_without_waiting_for_slow_queue() -> 
     work_task = asyncio.create_task(worker.work(burst=True))
     await asyncio.wait_for(processed.wait(), timeout=0.15)
     await work_task
+
+
+@pytest.mark.asyncio
+async def test_worker_survives_receive_error_and_processes_other_queues() -> None:
+    simpleq = SimpleQ()
+    processed = asyncio.Event()
+    definition = TaskDefinition(name=task_name_for(record_sync), func=record_sync)
+    simpleq.registry.register(definition)
+
+    class FailingQueue(FakeQueue):
+        async def receive(
+            self, *, max_messages: int, visibility_timeout: int
+        ) -> list[Job]:
+            assert max_messages
+            assert visibility_timeout == self.visibility_timeout
+            raise RuntimeError("temporary receive failure")
+
+    class ReadyQueue(FakeQueue):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            self._returned = False
+
+        async def receive(
+            self, *, max_messages: int, visibility_timeout: int
+        ) -> list[Job]:
+            assert max_messages
+            assert visibility_timeout == self.visibility_timeout
+            if self._returned:
+                return []
+            self._returned = True
+            return [
+                Job(
+                    task_name=definition.name,
+                    args=("hello",),
+                    kwargs={},
+                    queue_name=self.name,
+                )
+            ]
+
+    failing_queue = FailingQueue(simpleq=simpleq, name="failing")
+    ready_queue = ReadyQueue(simpleq=simpleq, name="ready")
+    worker = Worker(
+        simpleq,
+        [failing_queue, ready_queue],
+        concurrency=1,
+        poll_interval=0,
+    )
+    original_invoke = worker._invoke
+
+    async def invoke_and_mark(queue: Any, job: Job) -> Any:
+        processed.set()
+        return await original_invoke(queue, job)
+
+    worker._invoke = invoke_and_mark  # type: ignore[method-assign]
+    await asyncio.wait_for(worker.work(burst=True), timeout=0.5)
+    await asyncio.wait_for(processed.wait(), timeout=0.15)

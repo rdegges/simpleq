@@ -62,11 +62,27 @@ class Worker:
                 await asyncio.sleep(self.poll_interval)
 
     async def _receive(self, queue: Any) -> tuple[Any, list[Job]]:
-        jobs = await queue.receive(
-            max_messages=min(queue.batch_size, self.concurrency),
-            visibility_timeout=queue.visibility_timeout,
-        )
-        return queue, jobs
+        try:
+            jobs = await queue.receive(
+                max_messages=min(queue.batch_size, self.concurrency),
+                visibility_timeout=queue.visibility_timeout,
+            )
+            return queue, jobs
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            queue_name = str(getattr(queue, "name", "unknown"))
+            self.simpleq.logger.error(
+                "queue_receive_failed",
+                queue_name=queue_name,
+                error=str(exc),
+            )
+            self.simpleq.metrics.record_processed(
+                queue_name,
+                status="receive_error",
+                duration_seconds=0.0,
+            )
+            return queue, []
 
     def work_sync(self, *, burst: bool = False) -> None:
         """Synchronous wrapper for :meth:`work`."""
