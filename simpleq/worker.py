@@ -44,11 +44,11 @@ class Worker:
         while not self._stopping.is_set():
             processed = False
             tasks: list[asyncio.Task[None]] = []
-            for queue in self.queues:
-                jobs = await queue.receive(
-                    max_messages=min(queue.batch_size, self.concurrency),
-                    visibility_timeout=queue.visibility_timeout,
-                )
+            receive_tasks = [
+                asyncio.create_task(self._receive(queue)) for queue in self.queues
+            ]
+            for receive_task in asyncio.as_completed(receive_tasks):
+                queue, jobs = await receive_task
                 for job in jobs:
                     processed = True
                     tasks.append(
@@ -60,6 +60,13 @@ class Worker:
                 break
             if not processed:
                 await asyncio.sleep(self.poll_interval)
+
+    async def _receive(self, queue: Any) -> tuple[Any, list[Job]]:
+        jobs = await queue.receive(
+            max_messages=min(queue.batch_size, self.concurrency),
+            visibility_timeout=queue.visibility_timeout,
+        )
+        return queue, jobs
 
     def work_sync(self, *, burst: bool = False) -> None:
         """Synchronous wrapper for :meth:`work`."""
