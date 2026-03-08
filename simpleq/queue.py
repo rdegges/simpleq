@@ -31,6 +31,7 @@ _MAX_MESSAGE_ATTRIBUTES = 10
 _MAX_MESSAGE_ATTRIBUTE_NAME_LENGTH = 256
 _MAX_MESSAGE_ATTRIBUTE_VALUE_LENGTH = 256
 _MAX_FIFO_ROUTING_ID_LENGTH = 128
+_MAX_DLQ_MAX_RECEIVE_COUNT = 1000
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +124,12 @@ class Queue:
             self.config.wait_seconds if wait_seconds is None else wait_seconds
         )
         self.tags = tags or {}
+        if self.dlq and (
+            self.max_retries < 1 or self.max_retries > _MAX_DLQ_MAX_RECEIVE_COUNT
+        ):
+            raise QueueValidationError(
+                f"DLQ max_retries must be between 1 and {_MAX_DLQ_MAX_RECEIVE_COUNT}."
+            )
         self._queue_url: str | None = None
         self._dlq_url: str | None = None
         self._validate_receive_options(

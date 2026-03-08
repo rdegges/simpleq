@@ -54,6 +54,19 @@ def test_queue_derives_dlq_name() -> None:
     )
 
 
+@pytest.mark.parametrize("max_retries", [0, -1, 1001])
+def test_queue_rejects_invalid_dlq_max_retries(max_retries: int) -> None:
+    with pytest.raises(
+        QueueValidationError, match="DLQ max_retries must be between 1 and 1000"
+    ):
+        SimpleQ().queue("emails", dlq=True, max_retries=max_retries)
+
+
+def test_queue_allows_non_dlq_zero_max_retries() -> None:
+    queue = SimpleQ().queue("emails", dlq=False, max_retries=0)
+    assert queue.max_retries == 0
+
+
 def test_queue_validates_fifo_options() -> None:
     queue = SimpleQ().queue("orders.fifo", fifo=True, dlq=True)
     with pytest.raises(QueueValidationError):
