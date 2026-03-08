@@ -145,6 +145,30 @@ async def test_queue_enqueue_receive_and_iter_jobs(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("timeout_seconds", [-1, 43_201])
+async def test_queue_change_visibility_rejects_invalid_timeout(
+    simpleq_with_fake_transport: SimpleQ,
+    timeout_seconds: int,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", wait_seconds=0)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="emails",
+        receipt_handle="receipt-1",
+    )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="visibility_timeout must be between 0 and 43200",
+    ):
+        await queue.change_visibility(job, timeout_seconds)
+
+    assert simpleq_with_fake_transport.transport.visibility_changes == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [

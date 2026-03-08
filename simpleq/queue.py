@@ -374,6 +374,10 @@ class Queue:
         """Change the visibility timeout of a received message."""
         if job.receipt_handle is None:
             return
+        if timeout_seconds < 0 or timeout_seconds > _MAX_VISIBILITY_TIMEOUT:
+            raise QueueValidationError(
+                f"visibility_timeout must be between 0 and {_MAX_VISIBILITY_TIMEOUT}."
+            )
         queue_url = await self.ensure_exists()
         await self.simpleq.transport.change_message_visibility(
             self.name,

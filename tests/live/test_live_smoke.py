@@ -13,6 +13,7 @@ from uuid import uuid4
 import pytest
 
 from simpleq import SimpleQ
+from simpleq.exceptions import QueueValidationError
 from tests.fixtures import tasks
 
 
@@ -242,3 +243,36 @@ async def test_live_lazy_import_preserves_schema_metadata(
     finally:
         await module.queue.delete()
         sys.modules.pop(module_name, None)
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_live_change_visibility_rejects_invalid_timeout() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
+    queue = simpleq.queue(f"simpleq-live-visibility-{uuid4().hex[:8]}", wait_seconds=0)
+    task = simpleq.task(queue=queue)(tasks.record_sync)
+
+    try:
+        await task.delay("visibility")
+        messages = await queue.receive(max_messages=1, wait_seconds=0)
+        assert len(messages) == 1
+
+        with pytest.raises(
+            QueueValidationError,
+            match="visibility_timeout must be between 0 and 43200",
+        ):
+            await queue.change_visibility(messages[0], 43_201)
+
+        await queue.ack(messages[0])
+    finally:
+        await queue.delete()

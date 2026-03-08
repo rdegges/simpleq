@@ -9,6 +9,7 @@ import sys
 import pytest
 
 from simpleq import SimpleQ
+from simpleq.exceptions import QueueValidationError
 from tests.conftest import eventually
 from tests.fixtures import tasks
 
@@ -226,6 +227,29 @@ async def test_standard_delay(simpleq_localstack, unique_name, cleanup_queues) -
         timeout=5.0,
         interval=0.2,
     )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_change_visibility_rejects_invalid_timeout(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
+    queue = simpleq_localstack.queue(unique_name("visibility"), wait_seconds=0)
+    cleanup_queues.append(queue)
+    task = simpleq_localstack.task(queue=queue)(tasks.record_sync)
+    await task.delay("value")
+
+    messages = await queue.receive(max_messages=1, wait_seconds=0)
+    assert len(messages) == 1
+
+    with pytest.raises(
+        QueueValidationError,
+        match="visibility_timeout must be between 0 and 43200",
+    ):
+        await queue.change_visibility(messages[0], 43_201)
+
+    # The message remains acknowledged normally after the rejected timeout.
+    await queue.ack(messages[0])
 
 
 @pytest.mark.integration
