@@ -43,6 +43,10 @@ send_email.delay_sync(
 sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
 ```
 
+If you run workers against a network path that can hang, pass
+`receive_timeout_seconds` to `sq.worker(...)` so one stalled receive does not
+block processing from other queues.
+
 Treat each queue name as a single definition per `SimpleQ` instance. Reuse the
 same `queue` object, or pass the same FIFO/DLQ/retry/timing settings each time
 you call `sq.queue(...)`; SimpleQ now raises `QueueValidationError` when a later

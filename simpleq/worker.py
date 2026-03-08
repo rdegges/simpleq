@@ -26,15 +26,19 @@ class Worker:
         *,
         concurrency: int,
         poll_interval: float = 1.0,
+        receive_timeout_seconds: float | None = None,
     ) -> None:
         if concurrency < 1:
             raise ValueError("concurrency must be at least 1.")
         if poll_interval < 0:
             raise ValueError("poll_interval must be non-negative.")
+        if receive_timeout_seconds is not None and receive_timeout_seconds <= 0:
+            raise ValueError("receive_timeout_seconds must be greater than 0.")
         self.simpleq = simpleq
         self.queues = list(queues)
         self.concurrency = concurrency
         self.poll_interval = poll_interval
+        self.receive_timeout_seconds = receive_timeout_seconds
         self._stopping = asyncio.Event()
 
     async def work(self, *, burst: bool = False) -> None:
@@ -62,11 +66,28 @@ class Worker:
 
     async def _receive(self, queue: Any) -> tuple[Any, list[Job]]:
         try:
-            jobs = await queue.receive(
-                max_messages=min(queue.batch_size, self.concurrency),
-                visibility_timeout=queue.visibility_timeout,
+            timeout_seconds = self._receive_timeout(queue)
+            jobs = await asyncio.wait_for(
+                queue.receive(
+                    max_messages=min(queue.batch_size, self.concurrency),
+                    visibility_timeout=queue.visibility_timeout,
+                ),
+                timeout=timeout_seconds,
             )
             return queue, jobs
+        except asyncio.TimeoutError:
+            queue_name = str(getattr(queue, "name", "unknown"))
+            self.simpleq.logger.warning(
+                "queue_receive_timeout",
+                queue_name=queue_name,
+                timeout_seconds=timeout_seconds,
+            )
+            self.simpleq.metrics.record_processed(
+                queue_name,
+                status="receive_timeout",
+                duration_seconds=0.0,
+            )
+            return queue, []
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -82,6 +103,12 @@ class Worker:
                 duration_seconds=0.0,
             )
             return queue, []
+
+    def _receive_timeout(self, queue: Any) -> float:
+        if self.receive_timeout_seconds is not None:
+            return self.receive_timeout_seconds
+        wait_seconds = max(0, int(getattr(queue, "wait_seconds", 0)))
+        return float(wait_seconds + 5)
 
     def work_sync(self, *, burst: bool = False) -> None:
         """Synchronous wrapper for :meth:`work`."""

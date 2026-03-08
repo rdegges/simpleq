@@ -230,6 +230,7 @@ class SimpleQ:
         queues: Sequence[Queue | str],
         concurrency: int | None = None,
         poll_interval: float = 1.0,
+        receive_timeout_seconds: float | None = None,
     ) -> Worker:
         """Create a worker for the specified queues."""
         resolved_queues = [self.resolve_queue(queue) for queue in queues]
@@ -240,6 +241,7 @@ class SimpleQ:
                 self.config.concurrency if concurrency is None else concurrency
             ),
             poll_interval=poll_interval,
+            receive_timeout_seconds=receive_timeout_seconds,
         )
 
     async def list_queues(self, prefix: str | None = None) -> list[str]:

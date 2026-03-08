@@ -67,8 +67,12 @@ if __name__ == "__main__":
         subject="Hello",
         body="SimpleQ is ready.",
     )
-    sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
+sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
 ```
+
+For production workers polling remote SQS endpoints, you can set
+`receive_timeout_seconds` on `sq.worker(...)` to prevent a stuck
+`receive_message` call from stalling queue polling indefinitely.
 
 Within a single `SimpleQ` instance, a queue name has one source of truth. If
 you call `sq.queue("emails", ...)` again later, keep the configuration aligned

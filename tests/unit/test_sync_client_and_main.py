@@ -181,9 +181,12 @@ def test_simpleq_defers_transport_creation_until_first_use(
 
 def test_simpleq_worker_factory() -> None:
     simpleq = SimpleQ(concurrency=4)
-    worker = simpleq.worker(queues=["emails"], poll_interval=0.2)
+    worker = simpleq.worker(
+        queues=["emails"], poll_interval=0.2, receive_timeout_seconds=2.5
+    )
     assert worker.concurrency == 4
     assert worker.poll_interval == 0.2
+    assert worker.receive_timeout_seconds == 2.5
     assert worker.queues[0].name == "emails"
 
 
