@@ -166,10 +166,20 @@ class Worker:
 
     async def _handle_failure(self, queue: Any, job: Job, exc: BaseException) -> None:
         self.simpleq.cost_tracker.job_failed(queue.name)
-        should_retry = self._should_retry(job, exc)
+        definition = self._resolve_task_definition(job.task_name)
+        if definition is None:
+            await queue.move_to_dlq(job, error=f"task-definition-resolution-failed: {exc}")
+            self.simpleq.metrics.record_processed(
+                queue.name,
+                status="dlq" if queue_has_dlq(queue) else "failure",
+                duration_seconds=0.0,
+            )
+            return
+
+        should_retry = self._should_retry(definition, exc)
         if should_retry:
             self.simpleq.cost_tracker.job_retried(queue.name)
-            if job.receive_count >= effective_max_retries(queue, job):
+            if job.receive_count >= effective_max_retries(queue, definition):
                 await queue.move_to_dlq(job, error=str(exc))
                 self.simpleq.metrics.record_processed(
                     queue.name,
@@ -193,8 +203,18 @@ class Worker:
             duration_seconds=0.0,
         )
 
-    def _should_retry(self, job: Job, exc: BaseException) -> bool:
-        definition = self.simpleq.registry.get(job.task_name)
+    def _resolve_task_definition(self, task_name: str) -> Any | None:
+        try:
+            return self.simpleq.registry.get(task_name)
+        except Exception as resolve_exc:
+            self.simpleq.logger.error(
+                "task_definition_resolution_failed",
+                task_name=task_name,
+                error=str(resolve_exc),
+            )
+            return None
+
+    def _should_retry(self, definition: Any, exc: BaseException) -> bool:
         if definition.retry_exceptions is None:
             return True
         return isinstance(exc, definition.retry_exceptions)
@@ -224,9 +244,15 @@ def reconstruct_arguments(
     return (model,), {}
 
 
-def effective_max_retries(queue: Any, job: Job) -> int:
+def effective_max_retries(queue: Any, definition: Any) -> int:
     """Return the effective max retries for a given job."""
-    definition = queue.simpleq.registry.get(job.task_name)
     if definition.max_retries is not None:
         return int(definition.max_retries)
     return int(queue.max_retries)
+
+
+def queue_has_dlq(queue: Any) -> bool:
+    """Return whether a queue has DLQ support enabled."""
+    if getattr(queue, "dlq", False):
+        return True
+    return getattr(queue, "dlq_name", None) is not None

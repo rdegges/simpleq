@@ -10,6 +10,7 @@ import pytest
 
 from simpleq import SimpleQ
 from simpleq.exceptions import QueueValidationError
+from simpleq.job import Job
 from tests.conftest import eventually
 from tests.fixtures import tasks
 
@@ -272,6 +273,36 @@ async def test_retry_then_success(
     await worker.work(burst=True)
 
     assert ("retry-success", "job-1") in tasks.LOG
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_worker_moves_unresolvable_task_to_dlq(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
+    queue = simpleq_localstack.queue(
+        unique_name("missing-task"), dlq=True, visibility_timeout=1, wait_seconds=0
+    )
+    cleanup_queues.append(queue)
+    await queue.enqueue(
+        Job(
+            task_name="simpleq.no_such_module:no_such_task",
+            args=("payload",),
+            kwargs={},
+            queue_name=queue.name,
+        )
+    )
+
+    worker = simpleq_localstack.worker(queues=[queue], concurrency=1, poll_interval=0.1)
+    await worker.work(burst=True)
+    await eventually(lambda: _dlq_has_messages(queue), timeout=5.0, interval=0.2)
+
+    dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=1)]
+    assert len(dlq_jobs) == 1
+    assert dlq_jobs[0].task_name == "simpleq.no_such_module:no_such_task"
+    assert "task-definition-resolution-failed" in str(
+        dlq_jobs[0].metadata.get("last_error")
+    )
 
 
 @pytest.mark.integration

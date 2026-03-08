@@ -321,3 +321,24 @@ async def test_worker_ignores_heartbeat_task_failures() -> None:
 
     await worker._process_job(queue, job, asyncio.Semaphore(1))
     assert queue.acked == [job.job_id]
+
+
+@pytest.mark.asyncio
+async def test_worker_handles_unresolvable_task_without_crashing() -> None:
+    simpleq = SimpleQ()
+    queue = FakeQueue(simpleq=simpleq)
+    queue.dlq = True
+    worker = Worker(simpleq, [queue], concurrency=1)
+    job = Job(
+        task_name="simpleq.no_such_module:no_such_task",
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+
+    await worker._process_job(queue, job, asyncio.Semaphore(1))
+
+    assert queue.acked == []
+    assert queue.visibility_changes == []
+    assert len(queue.dlq_moves) == 1
+    assert "task-definition-resolution-failed" in queue.dlq_moves[0]

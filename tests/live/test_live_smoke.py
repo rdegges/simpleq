@@ -14,6 +14,7 @@ import pytest
 
 from simpleq import SimpleQ
 from simpleq.exceptions import QueueValidationError
+from simpleq.job import Job
 from tests.fixtures import tasks
 
 
@@ -178,6 +179,47 @@ async def test_live_fifo_dlq_redrive_smoke() -> None:
                 break
         else:
             raise AssertionError("Redriven FIFO message did not become visible.")
+    finally:
+        await queue.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_live_unresolvable_task_moves_to_dlq() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=1)
+    queue = simpleq.queue(f"simpleq-live-missing-task-{uuid4().hex[:8]}", dlq=True)
+    try:
+        await queue.enqueue(
+            Job(
+                task_name="simpleq.no_such_module:no_such_task",
+                args=("payload",),
+                kwargs={},
+                queue_name=queue.name,
+            )
+        )
+        worker = simpleq.worker(queues=[queue], concurrency=1, poll_interval=0.1)
+        await worker.work(burst=True)
+
+        for _ in range(25):
+            dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=1)]
+            if dlq_jobs:
+                assert dlq_jobs[0].task_name == "simpleq.no_such_module:no_such_task"
+                assert "task-definition-resolution-failed" in str(
+                    dlq_jobs[0].metadata.get("last_error")
+                )
+                break
+        else:
+            raise AssertionError("Missing-task message did not arrive in DLQ.")
     finally:
         await queue.delete()
 
