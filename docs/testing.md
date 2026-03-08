@@ -14,6 +14,11 @@ sq = SimpleQ(transport=InMemoryTransport())
 queue = sq.queue("emails")
 ```
 
+`InMemoryTransport` now simulates FIFO deduplication behavior too:
+
+- explicit `deduplication_id` values are deduplicated for 5 minutes
+- when `content_based_deduplication=True`, duplicate message bodies are deduplicated
+
 Recommended targets:
 
 - task serialization and schema validation

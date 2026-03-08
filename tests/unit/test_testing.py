@@ -52,3 +52,67 @@ async def test_inmemory_transport_lists_and_purges_queues() -> None:
     assert simpleq.list_queues_sync() == ["emails"]
     await queue.purge()
     assert (await queue.stats()).available_messages == 0
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_fifo_deduplicates_same_deduplication_id() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+    queue = simpleq.queue(
+        "orders.fifo",
+        fifo=True,
+        wait_seconds=0,
+        content_based_deduplication=False,
+    )
+    await queue.ensure_exists()
+
+    first = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("order-1",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+    second = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("order-2",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+    first_id = await queue.enqueue(
+        first,
+        message_group_id="customer-1",
+        deduplication_id="order-1",
+    )
+    second_id = await queue.enqueue(
+        second,
+        message_group_id="customer-1",
+        deduplication_id="order-1",
+    )
+
+    assert second_id == first_id
+    received = await queue.receive(max_messages=10, wait_seconds=0)
+    assert [job.args[0] for job in received] == ["order-1"]
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_fifo_content_based_deduplication() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+    queue = simpleq.queue(
+        "events.fifo",
+        fifo=True,
+        wait_seconds=0,
+        content_based_deduplication=True,
+    )
+    await queue.ensure_exists()
+
+    payload = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("same-body",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+    first_id = await queue.enqueue(payload, message_group_id="group-1")
+    second_id = await queue.enqueue(payload, message_group_id="group-1")
+
+    assert second_id == first_id
+    received = await queue.receive(max_messages=10, wait_seconds=0)
+    assert len(received) == 1

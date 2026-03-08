@@ -6,10 +6,13 @@ behavior needed for unit tests, examples, and local development helpers.
 
 from __future__ import annotations
 
+import hashlib
 import time
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
+
+_FIFO_DEDUPLICATION_WINDOW_SECONDS = 300.0
 
 
 @dataclass(slots=True)
@@ -32,6 +35,7 @@ class _StoredQueue:
     attributes: dict[str, str] = field(default_factory=dict)
     tags: dict[str, str] = field(default_factory=dict)
     messages: list[_StoredMessage] = field(default_factory=list)
+    deduplication_cache: dict[str, tuple[float, str]] = field(default_factory=dict)
 
     @property
     def url(self) -> str:
@@ -125,7 +129,9 @@ class InMemoryTransport:
 
     async def purge_queue(self, queue_name: str, queue_url: str) -> None:
         del queue_url
-        self._require_queue(queue_name).messages.clear()
+        queue = self._require_queue(queue_name)
+        queue.messages.clear()
+        queue.deduplication_cache.clear()
 
     async def send_message(
         self,
@@ -138,8 +144,21 @@ class InMemoryTransport:
         deduplication_id: str | None = None,
         message_attributes: dict[str, dict[str, str]] | None = None,
     ) -> str:
-        del queue_url, message_group_id, deduplication_id
+        del queue_url, message_group_id
         queue = self._require_queue(queue_name)
+        deduplication_key = self._deduplication_key(
+            queue=queue,
+            message_body=message_body,
+            deduplication_id=deduplication_id,
+        )
+        if deduplication_key is not None:
+            now = time.monotonic()
+            self._purge_expired_deduplication_entries(queue, now=now)
+            cached = queue.deduplication_cache.get(deduplication_key)
+            if cached is not None:
+                _, message_id = cached
+                return message_id
+
         message = _StoredMessage(
             message_id=uuid4().hex,
             body=message_body,
@@ -147,6 +166,11 @@ class InMemoryTransport:
             message_attributes=message_attributes or {},
         )
         queue.messages.append(message)
+        if deduplication_key is not None:
+            queue.deduplication_cache[deduplication_key] = (
+                time.monotonic() + _FIFO_DEDUPLICATION_WINDOW_SECONDS,
+                message.message_id,
+            )
         return message.message_id
 
     async def send_message_batch(
@@ -233,3 +257,27 @@ class InMemoryTransport:
         if queue is None:
             raise KeyError(f"Queue '{queue_name}' is not defined.")
         return queue
+
+    @staticmethod
+    def _purge_expired_deduplication_entries(queue: _StoredQueue, *, now: float) -> None:
+        queue.deduplication_cache = {
+            key: value
+            for key, value in queue.deduplication_cache.items()
+            if value[0] > now
+        }
+
+    @staticmethod
+    def _deduplication_key(
+        *,
+        queue: _StoredQueue,
+        message_body: str,
+        deduplication_id: str | None,
+    ) -> str | None:
+        if queue.attributes.get("FifoQueue") != "true":
+            return None
+        if deduplication_id:
+            return f"dedup:{deduplication_id}"
+        if queue.attributes.get("ContentBasedDeduplication") == "true":
+            content_hash = hashlib.sha256(message_body.encode("utf-8")).hexdigest()
+            return f"body:{content_hash}"
+        return None
