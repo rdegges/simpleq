@@ -30,6 +30,7 @@ _MAX_VISIBILITY_TIMEOUT = 43_200
 _MAX_MESSAGE_ATTRIBUTES = 10
 _MAX_MESSAGE_ATTRIBUTE_NAME_LENGTH = 256
 _MAX_MESSAGE_ATTRIBUTE_VALUE_LENGTH = 256
+_MAX_FIFO_ROUTING_ID_LENGTH = 128
 
 
 @dataclass(frozen=True, slots=True)
@@ -525,10 +526,18 @@ class Queue:
                 )
             if message_group_id is None:
                 raise QueueValidationError("FIFO queues require a message_group_id.")
+            validate_fifo_routing_identifier(
+                "message_group_id",
+                message_group_id,
+            )
             if deduplication_id is None and not self.content_based_deduplication:
                 raise QueueValidationError(
                     "FIFO queues without content-based deduplication require a deduplication_id."
                 )
+            validate_fifo_routing_identifier(
+                "deduplication_id",
+                deduplication_id,
+            )
 
     def _validate_receive_options(
         self,
@@ -672,3 +681,18 @@ def next_deduplication_id(queue: Queue, job: Job, *, reason: str) -> str | None:
     if queue.content_based_deduplication:
         return routing_deduplication_id(job)
     return f"simpleq-{reason}-{job.job_id}-{uuid4().hex}"
+
+
+def validate_fifo_routing_identifier(
+    name: str,
+    value: str | None,
+) -> None:
+    """Validate an optional FIFO routing identifier."""
+    if value is None:
+        return
+    if len(value) == 0:
+        raise QueueValidationError(f"{name} must be a non-empty string when set.")
+    if len(value) > _MAX_FIFO_ROUTING_ID_LENGTH:
+        raise QueueValidationError(
+            f"{name} must be {_MAX_FIFO_ROUTING_ID_LENGTH} characters or fewer."
+        )

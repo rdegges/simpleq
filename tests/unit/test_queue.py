@@ -70,6 +70,29 @@ def test_queue_validates_fifo_options() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("message_group_id", "deduplication_id", "message"),
+    [
+        ("", "dedup", "message_group_id must be a non-empty string"),
+        ("group", "", "deduplication_id must be a non-empty string"),
+        ("g" * 129, "dedup", "message_group_id must be 128 characters or fewer"),
+        ("group", "d" * 129, "deduplication_id must be 128 characters or fewer"),
+    ],
+)
+def test_queue_validates_fifo_routing_identifiers(
+    message_group_id: str,
+    deduplication_id: str,
+    message: str,
+) -> None:
+    queue = SimpleQ().queue("orders.fifo", fifo=True, dlq=True)
+    with pytest.raises(QueueValidationError, match=message):
+        queue._validate_message_options(
+            delay_seconds=0,
+            message_group_id=message_group_id,
+            deduplication_id=deduplication_id,
+        )
+
+
 def test_encode_message_attributes() -> None:
     assert encode_message_attributes({"source": "tests"}) == {
         "source": {"DataType": "String", "StringValue": "tests"}
