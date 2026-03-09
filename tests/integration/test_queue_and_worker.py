@@ -449,6 +449,11 @@ async def test_dlq_and_redrive(simpleq_localstack, unique_name, cleanup_queues) 
     await worker.work(burst=True)
     await eventually(lambda: _dlq_has_messages(queue), timeout=5.0, interval=0.2)
 
+    stats = await queue.stats()
+    assert stats.dlq_available_messages == 1
+    assert stats.dlq_in_flight_messages == 0
+    assert stats.dlq_delayed_messages == 0
+
     dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=5)]
     assert len(dlq_jobs) == 1
     assert dlq_jobs[0].metadata["last_error"] == "failure-job-2"

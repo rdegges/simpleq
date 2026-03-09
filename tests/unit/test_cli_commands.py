@@ -67,7 +67,17 @@ class FakeQueue:
         self.purged = True
 
     def stats_sync(self) -> QueueStats:
-        return QueueStats(self.name, False, None, 1, 0, 0)
+        return QueueStats(
+            self.name,
+            False,
+            f"{self.name}-dlq",
+            1,
+            0,
+            0,
+            2,
+            0,
+            0,
+        )
 
     async def get_dlq_jobs(self, *, limit: int) -> object:
         for _ in range(limit):
@@ -239,6 +249,19 @@ def test_dlq_cost_metrics_and_dashboard_commands(
     )
     dashboard_serve(host="0.0.0.0", port=8081, queue_names=["emails"])
     assert fake_server.called is True
+
+
+def test_queue_stats_command_includes_dlq_depth(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    client = FakeClient()
+    monkeypatch.setattr("simpleq.cli.make_client", lambda **_: client)
+
+    queue_stats("emails")
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["available_messages"] == 1
+    assert payload["dlq_available_messages"] == 2
 
 
 def test_doctor_and_task_list(

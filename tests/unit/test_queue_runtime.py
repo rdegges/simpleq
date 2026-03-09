@@ -25,6 +25,7 @@ class FakeTransport:
         self.visibility_changes: list[int] = []
         self.receive_calls: list[dict[str, Any]] = []
         self.receive_queue: list[list[dict[str, Any]]] = []
+        self.queue_attributes: dict[str, dict[str, str]] = {}
 
     async def ensure_queue(
         self,
@@ -76,11 +77,42 @@ class FakeTransport:
     ) -> dict[str, str]:
         if "QueueArn" in attribute_names:
             return {"QueueArn": f"arn:aws:sqs:us-east-1:000000000000:{queue_name}"}
-        return {
+        return self.queue_attributes.get(
+            queue_name,
+            {
+                "ApproximateNumberOfMessages": "2",
+                "ApproximateNumberOfMessagesNotVisible": "1",
+                "ApproximateNumberOfMessagesDelayed": "0",
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_queue_stats_include_dlq_depth(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", dlq=True, wait_seconds=0)
+    simpleq_with_fake_transport.transport.queue_attributes = {
+        queue.name: {
             "ApproximateNumberOfMessages": "2",
             "ApproximateNumberOfMessagesNotVisible": "1",
             "ApproximateNumberOfMessagesDelayed": "0",
         }
+    }
+    simpleq_with_fake_transport.transport.queue_attributes[queue.dlq_name] = {
+        "ApproximateNumberOfMessages": "3",
+        "ApproximateNumberOfMessagesNotVisible": "4",
+        "ApproximateNumberOfMessagesDelayed": "5",
+    }
+
+    stats = await queue.stats()
+
+    assert stats.available_messages == 2
+    assert stats.in_flight_messages == 1
+    assert stats.delayed_messages == 0
+    assert stats.dlq_available_messages == 3
+    assert stats.dlq_in_flight_messages == 4
+    assert stats.dlq_delayed_messages == 5
 
 
 @pytest.fixture

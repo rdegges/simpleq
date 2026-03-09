@@ -15,6 +15,9 @@ class FakeStats:
     available_messages: int
     in_flight_messages: int
     delayed_messages: int
+    dlq_available_messages: int | None = None
+    dlq_in_flight_messages: int | None = None
+    dlq_delayed_messages: int | None = None
 
 
 class FakeQueue:
@@ -27,6 +30,7 @@ class FakeQueue:
             available_messages=1,
             in_flight_messages=0,
             delayed_messages=0,
+            dlq_available_messages=2,
         )
 
 
@@ -61,6 +65,8 @@ def test_dashboard_render_with_explicit_queue_names() -> None:
     html = Dashboard(FakeSimpleQ(), queue_names=["emails"]).render_sync()
     assert "SimpleQ Dashboard" in html
     assert "emails" in html
+    assert "DLQ visible" in html
+    assert "2" in html
 
 
 def test_dashboard_server_routes() -> None:

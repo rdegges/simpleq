@@ -307,6 +307,11 @@ async def test_live_fifo_dlq_redrive_smoke() -> None:
         worker = simpleq.worker(queues=[queue], concurrency=1, poll_interval=0.1)
         await worker.work(burst=True)
 
+        stats = await queue.stats()
+        assert stats.dlq_available_messages == 1
+        assert stats.dlq_in_flight_messages == 0
+        assert stats.dlq_delayed_messages == 0
+
         dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=5)]
         assert len(dlq_jobs) == 1
         assert dlq_jobs[0].args == ("order-1",)

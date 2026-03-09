@@ -80,6 +80,7 @@ _DASHBOARD_TEMPLATE = Template(
             <tr>
               <th>Queue</th>
               <th>Visible</th>
+              <th>DLQ visible</th>
               <th>In flight</th>
               <th>Delayed</th>
             </tr>
@@ -89,12 +90,13 @@ _DASHBOARD_TEMPLATE = Template(
             <tr>
               <td>{{ queue.name }}</td>
               <td>{{ queue.available_messages }}</td>
+              <td>{{ queue.dlq_available_messages if queue.dlq_available_messages is not none else "n/a" }}</td>
               <td>{{ queue.in_flight_messages }}</td>
               <td>{{ queue.delayed_messages }}</td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="4" class="muted">No queues discovered.</td>
+              <td colspan="5" class="muted">No queues discovered.</td>
             </tr>
             {% endfor %}
           </tbody>

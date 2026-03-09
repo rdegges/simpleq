@@ -45,6 +45,9 @@ class QueueStats:
     available_messages: int
     in_flight_messages: int
     delayed_messages: int
+    dlq_available_messages: int | None = None
+    dlq_in_flight_messages: int | None = None
+    dlq_delayed_messages: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -435,19 +438,22 @@ class Queue:
     async def stats(self) -> QueueStats:
         """Return queue statistics."""
         queue_url = await self.ensure_exists()
-        attributes = await self.simpleq.transport.get_queue_attributes(
+        available, in_flight, delayed = await self._stats_for_queue(
             self.name,
             queue_url,
-            [
-                "ApproximateNumberOfMessages",
-                "ApproximateNumberOfMessagesNotVisible",
-                "ApproximateNumberOfMessagesDelayed",
-            ],
         )
-        available = int(attributes.get("ApproximateNumberOfMessages", "0"))
-        in_flight = int(attributes.get("ApproximateNumberOfMessagesNotVisible", "0"))
-        delayed = int(attributes.get("ApproximateNumberOfMessagesDelayed", "0"))
         self.simpleq.metrics.record_queue_depth(self.name, available)
+        dlq_available: int | None = None
+        dlq_in_flight: int | None = None
+        dlq_delayed: int | None = None
+        if self.dlq_name is not None:
+            dlq_queue = self._dlq_queue()
+            dlq_url = await dlq_queue.ensure_exists()
+            dlq_available, dlq_in_flight, dlq_delayed = await self._stats_for_queue(
+                dlq_queue.name,
+                dlq_url,
+            )
+            self.simpleq.metrics.record_queue_depth(dlq_queue.name, dlq_available)
         return QueueStats(
             name=self.name,
             fifo=self.fifo,
@@ -455,6 +461,9 @@ class Queue:
             available_messages=available,
             in_flight_messages=in_flight,
             delayed_messages=delayed,
+            dlq_available_messages=dlq_available,
+            dlq_in_flight_messages=dlq_in_flight,
+            dlq_delayed_messages=dlq_delayed,
         )
 
     def stats_sync(self) -> QueueStats:
@@ -626,6 +635,27 @@ class Queue:
                 error=exc,
             )
             return None
+
+    async def _stats_for_queue(
+        self,
+        queue_name: str,
+        queue_url: str,
+    ) -> tuple[int, int, int]:
+        """Fetch the standard message-count attributes for a queue."""
+        attributes = await self.simpleq.transport.get_queue_attributes(
+            queue_name,
+            queue_url,
+            [
+                "ApproximateNumberOfMessages",
+                "ApproximateNumberOfMessagesNotVisible",
+                "ApproximateNumberOfMessagesDelayed",
+            ],
+        )
+        return (
+            int(attributes.get("ApproximateNumberOfMessages", "0")),
+            int(attributes.get("ApproximateNumberOfMessagesNotVisible", "0")),
+            int(attributes.get("ApproximateNumberOfMessagesDelayed", "0")),
+        )
 
     def _validate_message_options(
         self,
