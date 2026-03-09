@@ -139,16 +139,31 @@ def test_encode_message_attributes_rejects_non_string_value() -> None:
         encode_message_attributes({"source": "tests", "attempt": 1})  # type: ignore[arg-type]
 
 
-def test_encode_message_attributes_allows_large_values_within_sqs_limits() -> None:
-    value = "a" * 2048
+def test_encode_message_attributes_allows_values_over_256_kib_up_to_1_mib() -> None:
+    value = "a" * 300_000
     assert encode_message_attributes({"source": value}) == {
         "source": {"DataType": "String", "StringValue": value}
     }
 
 
-def test_encode_message_attributes_rejects_values_larger_than_256_kib() -> None:
-    with pytest.raises(QueueValidationError, match="at most 262144 bytes"):
-        encode_message_attributes({"source": "a" * (262_144 + 1)})
+def test_encode_message_attributes_rejects_values_larger_than_1_mib() -> None:
+    with pytest.raises(QueueValidationError, match="at most 1048576 bytes"):
+        encode_message_attributes({"source": "a" * (1_048_576 + 1)})
+
+
+@pytest.mark.asyncio
+async def test_enqueue_rejects_payloads_larger_than_1_mib() -> None:
+    simpleq = SimpleQ()
+    queue = simpleq.queue("emails")
+    oversized_job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a" * 1_100_000,),
+        kwargs={},
+        queue_name=queue.name,
+    )
+
+    with pytest.raises(QueueValidationError, match="at most 1048576 bytes"):
+        await queue.enqueue(oversized_job)
 
 
 @pytest.mark.asyncio
@@ -163,4 +178,34 @@ async def test_enqueue_many_rejects_large_batches() -> None:
     )
     entries = [BatchEntry(job=job) for _ in range(11)]
     with pytest.raises(QueueValidationError):
+        await queue.enqueue_many(entries)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_many_rejects_batches_larger_than_1_mib() -> None:
+    simpleq = SimpleQ()
+    queue = simpleq.queue("emails")
+    entries = [
+        BatchEntry(
+            job=Job(
+                task_name="tests.fixtures.tasks:record_sync",
+                args=("a" * 540_000,),
+                kwargs={},
+                queue_name=queue.name,
+            )
+        ),
+        BatchEntry(
+            job=Job(
+                task_name="tests.fixtures.tasks:record_sync",
+                args=("b" * 540_000,),
+                kwargs={},
+                queue_name=queue.name,
+            )
+        ),
+    ]
+
+    with pytest.raises(
+        QueueValidationError,
+        match="batch payloads must total at most 1048576 bytes",
+    ):
         await queue.enqueue_many(entries)

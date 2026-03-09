@@ -142,6 +142,7 @@ async def test_live_existing_queue_attributes_and_tags_are_reconciled() -> None:
             updated_queue.name,
             queue_url,
             [
+                "MaximumMessageSize",
                 "VisibilityTimeout",
                 "ReceiveMessageWaitTimeSeconds",
                 "RedrivePolicy",
@@ -149,6 +150,7 @@ async def test_live_existing_queue_attributes_and_tags_are_reconciled() -> None:
         )
 
         redrive_policy = json.loads(attributes["RedrivePolicy"])
+        assert attributes["MaximumMessageSize"] == "1048576"
         assert attributes["VisibilityTimeout"] == "9"
         assert attributes["ReceiveMessageWaitTimeSeconds"] == "5"
         assert initial_queue.dlq_name in redrive_policy["deadLetterTargetArn"]
@@ -187,6 +189,42 @@ async def test_live_message_attributes_support_values_over_256_characters() -> N
         queue_name=queue.name,
     )
     large_value = "a" * 2048
+
+    try:
+        await queue.enqueue(job, attributes={"trace": large_value})
+        received = await queue.receive(max_messages=1, wait_seconds=0)
+        assert len(received) == 1
+        assert received[0].message_attributes["trace"] == large_value
+        await queue.ack(received[0])
+    finally:
+        await queue.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_live_message_attributes_support_values_over_256_kib() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
+    queue = simpleq.queue(
+        f"simpleq-live-large-attrs-{uuid4().hex[:8]}",
+        wait_seconds=0,
+    )
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("attribute-large-smoke",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+    large_value = "a" * 300_000
 
     try:
         await queue.enqueue(job, attributes={"trace": large_value})

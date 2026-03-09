@@ -76,12 +76,14 @@ async def test_ensure_exists_reconciles_existing_queue_attributes(
         updated_queue.name,
         queue_url,
         [
+            "MaximumMessageSize",
             "VisibilityTimeout",
             "ReceiveMessageWaitTimeSeconds",
             "RedrivePolicy",
         ],
     )
 
+    assert attributes["MaximumMessageSize"] == "1048576"
     assert attributes["VisibilityTimeout"] == "7"
     assert attributes["ReceiveMessageWaitTimeSeconds"] == "4"
     assert initial_queue.dlq_name in attributes["RedrivePolicy"]
@@ -221,6 +223,29 @@ async def test_batch_enqueue(simpleq_localstack, unique_name, cleanup_queues) ->
 
     received = await queue.receive(max_messages=3, wait_seconds=0)
     assert {job.args[0] for job in received} == {"value-0", "value-1", "value-2"}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_message_attributes_support_values_over_256_kib(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
+    queue = simpleq_localstack.queue(unique_name("large-attrs"), wait_seconds=0)
+    cleanup_queues.append(queue)
+    large_value = "a" * 300_000
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("attribute-smoke",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+
+    await queue.enqueue(job, attributes={"trace": large_value})
+    received = await queue.receive(max_messages=1, wait_seconds=0)
+
+    assert len(received) == 1
+    assert received[0].message_attributes["trace"] == large_value
+    await queue.ack(received[0])
 
 
 @pytest.mark.integration

@@ -34,6 +34,9 @@ Boolean environment flags are strict. Use `1/0`, `true/false`, `yes/no`, or
 Numeric queue/runtime settings are validated eagerly against SQS limits:
 `batch_size`/`max_messages` `1-10`, `wait_seconds` `0-20`,
 `visibility_timeout` `0-43200`, and `concurrency >= 1`.
+Queue creation also reconciles `MaximumMessageSize=1048576` so SimpleQ queues
+can use the current SQS `1 MiB` payload limit, and enqueue operations fail fast
+locally if a single message or batch exceeds that budget.
 
 You can set `default_queue_name` (or `SIMPLEQ_DEFAULT_QUEUE`) to either a
 standard queue (for example `jobs`) or FIFO queue (for example `jobs.fifo`).

@@ -316,6 +316,13 @@ async def test_queue_batch_dlq_and_misc_branches(
         )["FifoQueue"]
         == "true"
     )
+    assert (
+        queue._create_queue_attributes(
+            fifo=False,
+            content_based_deduplication=False,
+        )["MaximumMessageSize"]
+        == "1048576"
+    )
     assert queue._create_queue_attributes(
         fifo=False, content_based_deduplication=False
     )["VisibilityTimeout"] == str(queue.visibility_timeout)

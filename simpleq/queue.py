@@ -29,7 +29,8 @@ _MAX_WAIT_SECONDS = 20
 _MAX_VISIBILITY_TIMEOUT = 43_200
 _MAX_MESSAGE_ATTRIBUTES = 10
 _MAX_MESSAGE_ATTRIBUTE_NAME_LENGTH = 256
-_MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES = 262_144
+_MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES = 1_048_576
+_MAX_MESSAGE_SIZE_BYTES = 1_048_576
 _MAX_FIFO_ROUTING_ID_LENGTH = 128
 _MAX_DLQ_MAX_RECEIVE_COUNT = 1000
 
@@ -82,12 +83,39 @@ def encode_message_attributes(
             raise QueueValidationError("message attribute values must be strings.")
         if len(value.encode("utf-8")) > _MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES:
             raise QueueValidationError(
-                "message attribute values must be at most 262144 bytes."
+                "message attribute values must be at most 1048576 bytes."
             )
     return {
         key: {"DataType": "String", "StringValue": value}
         for key, value in attributes.items()
     }
+
+
+def message_payload_size_bytes(
+    message_body: str,
+    message_attributes: dict[str, dict[str, str]],
+) -> int:
+    """Return the SQS payload size contributed by a message body and attributes."""
+    size = len(message_body.encode("utf-8"))
+    for key, attribute in message_attributes.items():
+        size += len(key.encode("utf-8"))
+        size += len(str(attribute.get("DataType", "")).encode("utf-8"))
+        size += len(str(attribute.get("StringValue", "")).encode("utf-8"))
+    return size
+
+
+def validate_message_payload_size(
+    message_body: str,
+    message_attributes: dict[str, dict[str, str]],
+) -> int:
+    """Validate a single SQS message payload against the queue size limit."""
+    size = message_payload_size_bytes(message_body, message_attributes)
+    if size > _MAX_MESSAGE_SIZE_BYTES:
+        raise QueueValidationError(
+            "SQS message payloads must be at most 1048576 bytes including "
+            "message attributes."
+        )
+    return size
 
 
 class Queue:
@@ -233,17 +261,19 @@ class Queue:
             message_group_id=resolved_group_id,
             deduplication_id=resolved_deduplication_id,
         )
-        queue_url = await self.ensure_exists()
         prepared_job = persist_routing_metadata(
             job,
             message_group_id=resolved_group_id,
             deduplication_id=resolved_deduplication_id,
         )
+        message_body = prepared_job.to_message_body()
         message_attributes = encode_message_attributes(attributes)
+        validate_message_payload_size(message_body, message_attributes)
+        queue_url = await self.ensure_exists()
         message_id = await self.simpleq.transport.send_message(
             self.name,
             queue_url,
-            message_body=prepared_job.to_message_body(),
+            message_body=message_body,
             delay_seconds=None if self.fifo else delay_seconds,
             message_group_id=resolved_group_id,
             deduplication_id=resolved_deduplication_id,
@@ -260,8 +290,8 @@ class Queue:
         if len(entries) > 10:
             raise QueueValidationError("SQS batches support at most 10 entries.")
 
-        queue_url = await self.ensure_exists()
         payloads: list[dict[str, Any]] = []
+        total_payload_size = 0
         for entry in entries:
             resolved_group_id = entry.message_group_id or routing_message_group_id(
                 entry.job
@@ -279,9 +309,15 @@ class Queue:
                 message_group_id=resolved_group_id,
                 deduplication_id=resolved_deduplication_id,
             )
+            message_body = prepared_job.to_message_body()
+            message_attributes = encode_message_attributes(entry.attributes)
+            total_payload_size += validate_message_payload_size(
+                message_body,
+                message_attributes,
+            )
             payload: dict[str, Any] = {
                 "Id": uuid4().hex,
-                "MessageBody": prepared_job.to_message_body(),
+                "MessageBody": message_body,
             }
             if not self.fifo and entry.delay_seconds:
                 payload["DelaySeconds"] = entry.delay_seconds
@@ -289,12 +325,17 @@ class Queue:
                 payload["MessageGroupId"] = resolved_group_id
             if resolved_deduplication_id is not None:
                 payload["MessageDeduplicationId"] = resolved_deduplication_id
-            if entry.attributes:
-                payload["MessageAttributes"] = encode_message_attributes(
-                    entry.attributes
-                )
+            if message_attributes:
+                payload["MessageAttributes"] = message_attributes
             payloads.append(payload)
 
+        if total_payload_size > _MAX_MESSAGE_SIZE_BYTES:
+            raise QueueValidationError(
+                "SQS batch payloads must total at most 1048576 bytes across all "
+                "messages."
+            )
+
+        queue_url = await self.ensure_exists()
         message_ids = await self.simpleq.transport.send_message_batch(
             self.name,
             queue_url,
@@ -512,6 +553,7 @@ class Queue:
         dlq_arn: str | None = None,
     ) -> dict[str, str]:
         attributes = {
+            "MaximumMessageSize": str(_MAX_MESSAGE_SIZE_BYTES),
             "ReceiveMessageWaitTimeSeconds": str(self.wait_seconds),
             "VisibilityTimeout": str(self.visibility_timeout),
         }
