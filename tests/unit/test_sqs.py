@@ -380,4 +380,9 @@ async def test_send_message_batch_raises_on_partial_failure(
 def test_uses_local_credentials() -> None:
     assert uses_local_credentials("http://localhost:4566") is True
     assert uses_local_credentials("http://localstack:4566") is True
+    assert uses_local_credentials("http://host.docker.internal:4566") is True
+    assert (
+        uses_local_credentials("https://sqs.us-east-1.amazonaws.com/localstack-proxy")
+        is False
+    )
     assert uses_local_credentials("https://sqs.us-east-1.amazonaws.com") is False

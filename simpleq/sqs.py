@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import boto3
 from botocore.exceptions import ClientError
@@ -416,4 +417,13 @@ def uses_local_credentials(endpoint_url: str | None) -> bool:
     """Return whether an endpoint should default to LocalStack-style test creds."""
     if endpoint_url is None:
         return False
-    return any(host in endpoint_url for host in ("localhost", "127.0.0.1", "localstack"))
+    hostname = urlparse(endpoint_url).hostname
+    if hostname is None:
+        return False
+    normalized = hostname.strip().lower()
+    return normalized in {
+        "localhost",
+        "127.0.0.1",
+        "localstack",
+        "host.docker.internal",
+    }
