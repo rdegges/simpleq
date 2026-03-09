@@ -162,7 +162,7 @@ async def test_worker_stop_sleep_sync_and_sync_invoke() -> None:
 
 
 @pytest.mark.asyncio
-async def test_worker_cancellation_does_not_mark_job_failed() -> None:
+async def test_worker_task_cancelled_error_is_treated_as_failure() -> None:
     simpleq = SimpleQ()
     definition = TaskDefinition(name=task_name_for(record_sync), func=record_sync)
     simpleq.registry.register(definition)
@@ -180,11 +180,10 @@ async def test_worker_cancellation_does_not_mark_job_failed() -> None:
 
     worker._invoke = cancelled_invoke  # type: ignore[method-assign]
 
-    with pytest.raises(asyncio.CancelledError):
-        await worker._process_job(queue, job, asyncio.Semaphore(1))
+    await worker._process_job(queue, job, asyncio.Semaphore(1))
 
     assert queue.acked == []
-    assert queue.visibility_changes == []
+    assert queue.visibility_changes == [1]
     assert queue.dlq_moves == []
 
 

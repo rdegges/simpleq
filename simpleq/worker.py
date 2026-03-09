@@ -147,6 +147,13 @@ class Worker:
                 heartbeat_task = self._heartbeat(queue, job)
                 await self._invoke(queue, job)
             except asyncio.CancelledError:
+                if not self._stopping.is_set():
+                    await self._handle_failure(
+                        queue,
+                        job,
+                        RuntimeError("Task execution cancelled unexpectedly."),
+                    )
+                    return
                 raise
             except Exception as exc:
                 await self._handle_failure(queue, job, exc)
