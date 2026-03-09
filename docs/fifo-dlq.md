@@ -23,6 +23,9 @@ Rules to remember:
   DLQ, or redriven back to the primary queue
 - redriven FIFO messages get a fresh internal deduplication ID so AWS does not
   drop them inside the five-minute deduplication window
+- `Job.metadata` is reconciled from the current SQS envelope on receive, so the
+  routing IDs you inspect after DLQ moves or redrives match the actual message
+  state in SQS
 
 ## DLQs
 

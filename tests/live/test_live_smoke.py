@@ -315,6 +315,10 @@ async def test_live_fifo_dlq_redrive_smoke() -> None:
         dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=5)]
         assert len(dlq_jobs) == 1
         assert dlq_jobs[0].args == ("order-1",)
+        assert dlq_jobs[0].metadata["message_group_id"] == "customer-1"
+        assert dlq_jobs[0].metadata["_simpleq_message_group_id"] == "customer-1"
+        assert dlq_jobs[0].metadata["deduplication_id"] != "dedup-order-1"
+        assert dlq_jobs[0].metadata["_simpleq_deduplication_id"] != "dedup-order-1"
 
         redriven = await queue.redrive_dlq_jobs(limit=1)
         assert redriven == 1
@@ -323,6 +327,16 @@ async def test_live_fifo_dlq_redrive_smoke() -> None:
             received = await queue.receive(max_messages=1, wait_seconds=0)
             if received:
                 assert received[0].args == ("order-1",)
+                assert received[0].metadata["message_group_id"] == "customer-1"
+                assert received[0].metadata["_simpleq_message_group_id"] == "customer-1"
+                assert received[0].metadata["deduplication_id"] not in {
+                    "dedup-order-1",
+                    dlq_jobs[0].metadata["deduplication_id"],
+                }
+                assert received[0].metadata["_simpleq_deduplication_id"] not in {
+                    "dedup-order-1",
+                    dlq_jobs[0].metadata["_simpleq_deduplication_id"],
+                }
                 await queue.ack(received[0])
                 break
         else:

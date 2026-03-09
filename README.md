@@ -46,6 +46,10 @@ wait for delayed messages that become visible during `receive(..., wait_seconds=
 `Queue.stats()` and the built-in dashboard also surface DLQ depth when DLQ
 support is enabled, so operators can spot backlogs without polling the dead
 letter queue separately.
+For FIFO workflows, `Job.metadata` is reconciled with the current SQS
+`MessageGroupId` and `MessageDeduplicationId` on receive, so DLQ inspection and
+redrive tooling see the actual routing IDs in flight instead of stale serialized
+values.
 
 You can set `default_queue_name` (or `SIMPLEQ_DEFAULT_QUEUE`) to either a
 standard queue (for example `jobs`) or FIFO queue (for example `jobs.fifo`).

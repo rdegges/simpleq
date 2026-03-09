@@ -449,6 +449,9 @@ async def test_fifo_dlq_and_redrive_preserve_group_and_rotate_deduplication_id(
     assert dlq_send["message_group_id"] == "customer-1"
     assert dlq_send["deduplication_id"] != "dedup-order-1"
     assert dlq_send["deduplication_id"] is not None
+    dlq_payload = Job.from_message_body(dlq_send["message_body"])
+    assert dlq_payload.metadata["message_group_id"] == "customer-1"
+    assert dlq_payload.metadata["deduplication_id"] == dlq_send["deduplication_id"]
 
     simpleq_with_fake_transport.transport.receive_queue = [
         [
@@ -476,6 +479,12 @@ async def test_fifo_dlq_and_redrive_preserve_group_and_rotate_deduplication_id(
         "dedup-order-1",
         dlq_send["deduplication_id"],
     }
+    redrive_payload = Job.from_message_body(redrive_send["message_body"])
+    assert redrive_payload.metadata["message_group_id"] == "customer-1"
+    assert (
+        redrive_payload.metadata["deduplication_id"]
+        == redrive_send["deduplication_id"]
+    )
     assert "receipt-dlq" in simpleq_with_fake_transport.transport.deleted_messages
 
 

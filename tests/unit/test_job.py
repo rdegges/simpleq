@@ -49,6 +49,38 @@ def test_job_from_sqs_message_extracts_attributes() -> None:
     assert restored.metadata["deduplication_id"] == "dedup-1"
 
 
+def test_job_from_sqs_message_prefers_current_system_routing_attributes() -> None:
+    message = {
+        "Body": Job(
+            task_name="tests.fixtures.tasks:record_sync",
+            args=("value",),
+            kwargs={},
+            queue_name="emails",
+            metadata={
+                "message_group_id": "stale-group",
+                "deduplication_id": "stale-dedup",
+                "_simpleq_message_group_id": "stale-group",
+                "_simpleq_deduplication_id": "stale-dedup",
+            },
+        ).to_message_body(),
+        "ReceiptHandle": "abc",
+        "MessageId": "mid",
+        "Attributes": {
+            "ApproximateReceiveCount": "2",
+            "MessageGroupId": "group-1",
+            "MessageDeduplicationId": "dedup-1",
+        },
+        "MessageAttributes": {},
+    }
+
+    restored = Job.from_sqs_message("emails", message)
+
+    assert restored.metadata["message_group_id"] == "group-1"
+    assert restored.metadata["_simpleq_message_group_id"] == "group-1"
+    assert restored.metadata["deduplication_id"] == "dedup-1"
+    assert restored.metadata["_simpleq_deduplication_id"] == "dedup-1"
+
+
 def test_job_with_attempt_copies_error_metadata() -> None:
     job = Job(
         task_name="tests.fixtures.tasks:record_sync",

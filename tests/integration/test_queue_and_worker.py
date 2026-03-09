@@ -258,6 +258,61 @@ async def test_batch_enqueue(simpleq_localstack, unique_name, cleanup_queues) ->
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_fifo_dlq_and_redrive_reconcile_routing_metadata(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
+    queue = simpleq_localstack.queue(
+        unique_name("fifo-metadata").replace("-", "")[:68] + ".fifo",
+        fifo=True,
+        dlq=True,
+        content_based_deduplication=False,
+        wait_seconds=0,
+        visibility_timeout=1,
+    )
+    cleanup_queues.append(queue)
+    task = simpleq_localstack.task(
+        queue=queue,
+        message_group_id=lambda value: "customer-1",
+        deduplication_id=lambda value: f"dedup-{value}",
+        max_retries=1,
+    )(tasks.always_fail)
+
+    await task.delay("order-1")
+    worker = simpleq_localstack.worker(queues=[queue], concurrency=1, poll_interval=0.1)
+    await worker.work(burst=True)
+
+    dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=1)]
+    assert len(dlq_jobs) == 1
+    assert dlq_jobs[0].metadata["message_group_id"] == "customer-1"
+    assert dlq_jobs[0].metadata["_simpleq_message_group_id"] == "customer-1"
+    assert dlq_jobs[0].metadata["deduplication_id"] != "dedup-order-1"
+    assert dlq_jobs[0].metadata["_simpleq_deduplication_id"] != "dedup-order-1"
+
+    await queue.redrive_dlq_jobs(limit=1)
+
+    received = []
+    for _ in range(25):
+        received = await queue.receive(max_messages=1, wait_seconds=0)
+        if received:
+            break
+        await asyncio.sleep(0.2)
+
+    assert len(received) == 1
+    assert received[0].metadata["message_group_id"] == "customer-1"
+    assert received[0].metadata["_simpleq_message_group_id"] == "customer-1"
+    assert received[0].metadata["deduplication_id"] not in {
+        "dedup-order-1",
+        dlq_jobs[0].metadata["deduplication_id"],
+    }
+    assert received[0].metadata["_simpleq_deduplication_id"] not in {
+        "dedup-order-1",
+        dlq_jobs[0].metadata["_simpleq_deduplication_id"],
+    }
+    await queue.ack(received[0])
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_receive_waits_for_delayed_message_visibility(
     simpleq_localstack, unique_name, cleanup_queues
 ) -> None:

@@ -910,10 +910,13 @@ def persist_metadata_value(
     key: str,
     value: str | None,
 ) -> bool:
-    """Store a string metadata value when the key is not already set."""
-    if key in metadata or value is None:
+    """Store the current string metadata value for a reserved routing key."""
+    if value is None:
         return False
-    metadata[key] = value
+    string_value = str(value)
+    if metadata.get(key) == string_value:
+        return False
+    metadata[key] = string_value
     return True
 
 

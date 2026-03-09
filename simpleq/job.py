@@ -127,13 +127,13 @@ def _attach_system_routing_metadata(job: Job, system_attributes: Any) -> None:
         return
 
     metadata = dict(job.metadata)
-    changed = _set_metadata_if_missing(
+    changed = _set_metadata_value(
         metadata,
         MESSAGE_GROUP_METADATA_KEY,
         system_attributes.get("MessageGroupId"),
     )
     changed = (
-        _set_metadata_if_missing(
+        _set_metadata_value(
             metadata,
             LEGACY_MESSAGE_GROUP_METADATA_KEY,
             system_attributes.get("MessageGroupId"),
@@ -141,7 +141,7 @@ def _attach_system_routing_metadata(job: Job, system_attributes: Any) -> None:
         or changed
     )
     changed = (
-        _set_metadata_if_missing(
+        _set_metadata_value(
             metadata,
             DEDUPLICATION_METADATA_KEY,
             system_attributes.get("MessageDeduplicationId"),
@@ -149,7 +149,7 @@ def _attach_system_routing_metadata(job: Job, system_attributes: Any) -> None:
         or changed
     )
     changed = (
-        _set_metadata_if_missing(
+        _set_metadata_value(
             metadata,
             LEGACY_DEDUPLICATION_METADATA_KEY,
             system_attributes.get("MessageDeduplicationId"),
@@ -160,11 +160,14 @@ def _attach_system_routing_metadata(job: Job, system_attributes: Any) -> None:
         job.metadata = metadata
 
 
-def _set_metadata_if_missing(
+def _set_metadata_value(
     metadata: dict[str, JSONValue], key: str, value: Any
 ) -> bool:
-    """Store a stringified metadata value when the key is not already set."""
-    if key in metadata or value is None:
+    """Store the latest stringified routing metadata from the SQS envelope."""
+    if value is None:
         return False
-    metadata[key] = str(value)
+    string_value = str(value)
+    if metadata.get(key) == string_value:
+        return False
+    metadata[key] = string_value
     return True
