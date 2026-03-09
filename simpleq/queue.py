@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 from uuid import uuid4
 
 from simpleq._sync import run_sync
-from simpleq.exceptions import QueueValidationError
+from simpleq.exceptions import QueueNotFoundError, QueueValidationError
 from simpleq.job import (
     DEDUPLICATION_METADATA_KEY,
     LEGACY_DEDUPLICATION_METADATA_KEY,
@@ -19,7 +19,7 @@ from simpleq.job import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Sequence
+    from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 
 _QUEUE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 _MESSAGE_ATTRIBUTE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -36,6 +36,11 @@ _MAX_DLQ_MAX_RECEIVE_COUNT = 1000
 _MAX_QUEUE_TAGS = 50
 _MAX_TAG_KEY_LENGTH = 128
 _MAX_TAG_VALUE_LENGTH = 256
+_MISSING_QUEUE_ERROR_CODES = {
+    "AWS.SimpleQueueService.NonExistentQueue",
+    "QueueDoesNotExist",
+}
+T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,15 +280,17 @@ class Queue:
         message_body = prepared_job.to_message_body()
         message_attributes = encode_message_attributes(attributes)
         validate_message_payload_size(message_body, message_attributes)
-        queue_url = await self.ensure_exists()
-        message_id = await self.simpleq.transport.send_message(
-            self.name,
-            queue_url,
-            message_body=message_body,
-            delay_seconds=None if self.fifo else delay_seconds,
-            message_group_id=resolved_group_id,
-            deduplication_id=resolved_deduplication_id,
-            message_attributes=message_attributes,
+        message_id = await self._with_refreshed_queue_url(
+            "send_message",
+            lambda queue_url: self.simpleq.transport.send_message(
+                self.name,
+                queue_url,
+                message_body=message_body,
+                delay_seconds=None if self.fifo else delay_seconds,
+                message_group_id=resolved_group_id,
+                deduplication_id=resolved_deduplication_id,
+                message_attributes=message_attributes,
+            ),
         )
         self.simpleq.cost_tracker.job_enqueued(self.name)
         self.simpleq.metrics.record_enqueue(self.name)
@@ -341,11 +348,13 @@ class Queue:
                 "messages."
             )
 
-        queue_url = await self.ensure_exists()
-        message_ids = await self.simpleq.transport.send_message_batch(
-            self.name,
-            queue_url,
-            payloads,
+        message_ids = await self._with_refreshed_queue_url(
+            "send_message_batch",
+            lambda queue_url: self.simpleq.transport.send_message_batch(
+                self.name,
+                queue_url,
+                payloads,
+            ),
         )
         self.simpleq.cost_tracker.job_enqueued(self.name, count=len(entries))
         self.simpleq.metrics.record_enqueue(self.name, count=len(entries))
@@ -370,13 +379,14 @@ class Queue:
             wait_seconds=resolved_wait_seconds,
             visibility_timeout=visibility_timeout,
         )
-        queue_url = await self.ensure_exists()
-        messages = await self.simpleq.transport.receive_messages(
-            self.name,
-            queue_url,
-            max_messages=resolved_max_messages,
-            wait_seconds=resolved_wait_seconds,
-            visibility_timeout=visibility_timeout,
+        queue_url, messages = await self._with_refreshed_queue_url(
+            "receive_messages",
+            lambda queue_url: self._receive_raw_messages(
+                queue_url,
+                max_messages=resolved_max_messages,
+                wait_seconds=resolved_wait_seconds,
+                visibility_timeout=visibility_timeout,
+            ),
         )
         decoded = [
             await self._decode_message(queue_url=queue_url, message=message)
@@ -417,9 +427,11 @@ class Queue:
         """Delete a processed message."""
         if job.receipt_handle is None:
             return
-        queue_url = await self.ensure_exists()
-        await self.simpleq.transport.delete_message(
-            self.name, queue_url, job.receipt_handle
+        await self._with_refreshed_queue_url(
+            "delete_message",
+            lambda queue_url: self.simpleq.transport.delete_message(
+                self.name, queue_url, job.receipt_handle
+            ),
         )
 
     async def change_visibility(self, job: Job, timeout_seconds: int) -> None:
@@ -430,12 +442,14 @@ class Queue:
             raise QueueValidationError(
                 f"visibility_timeout must be between 0 and {_MAX_VISIBILITY_TIMEOUT}."
             )
-        queue_url = await self.ensure_exists()
-        await self.simpleq.transport.change_message_visibility(
-            self.name,
-            queue_url,
-            job.receipt_handle,
-            timeout_seconds,
+        await self._with_refreshed_queue_url(
+            "change_message_visibility",
+            lambda queue_url: self.simpleq.transport.change_message_visibility(
+                self.name,
+                queue_url,
+                job.receipt_handle,
+                timeout_seconds,
+            ),
         )
 
     async def stats(self) -> QueueStats:
@@ -659,6 +673,44 @@ class Queue:
             int(attributes.get("ApproximateNumberOfMessagesNotVisible", "0")),
             int(attributes.get("ApproximateNumberOfMessagesDelayed", "0")),
         )
+
+    async def _receive_raw_messages(
+        self,
+        queue_url: str,
+        *,
+        max_messages: int,
+        wait_seconds: int,
+        visibility_timeout: int | None,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        messages = await self.simpleq.transport.receive_messages(
+            self.name,
+            queue_url,
+            max_messages=max_messages,
+            wait_seconds=wait_seconds,
+            visibility_timeout=visibility_timeout,
+        )
+        return queue_url, messages
+
+    async def _with_refreshed_queue_url(
+        self,
+        operation: str,
+        call: Callable[[str], Awaitable[T]],
+    ) -> T:
+        queue_url = await self.ensure_exists()
+        try:
+            return await call(queue_url)
+        except Exception as exc:
+            if not is_missing_queue_error(exc):
+                raise
+            self.simpleq.logger.warning(
+                "queue_url_stale_retry",
+                queue_name=self.name,
+                operation=operation,
+                error=str(exc),
+            )
+            self._queue_url = None
+            refreshed_url = await self.ensure_exists()
+            return await call(refreshed_url)
 
     async def _reset_dlq_visibility(self, dlq_queue: Queue, job: Job) -> None:
         """Best-effort visibility reset for DLQ inspection helpers."""
@@ -887,3 +939,19 @@ def validate_fifo_routing_identifier(
         raise QueueValidationError(
             f"{name} must be {_MAX_FIFO_ROUTING_ID_LENGTH} characters or fewer."
         )
+
+
+def is_missing_queue_error(exc: Exception) -> bool:
+    """Return whether an exception represents a missing queue."""
+    if isinstance(exc, QueueNotFoundError):
+        return True
+    if isinstance(exc, KeyError):
+        return True
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return False
+    error = response.get("Error")
+    if not isinstance(error, dict):
+        return False
+    code = error.get("Code")
+    return isinstance(code, str) and code in _MISSING_QUEUE_ERROR_CODES

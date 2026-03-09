@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from simpleq import SimpleQ
-from simpleq.exceptions import QueueValidationError
+from simpleq.exceptions import QueueNotFoundError, QueueValidationError
 from simpleq.job import Job
 from simpleq.queue import BatchEntry
 
@@ -174,6 +174,49 @@ async def test_queue_enqueue_receive_and_iter_jobs(
     simpleq_with_fake_transport.transport.receive_queue = [[message], []]
     iterated = [job async for job in queue.iter_jobs(limit=1)]
     assert len(iterated) == 1
+
+
+@pytest.mark.asyncio
+async def test_queue_enqueue_recovers_from_stale_queue_url() -> None:
+    class FlakySendTransport(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self._failed_once = False
+
+        async def send_message(
+            self,
+            queue_name: str,
+            queue_url: str,
+            **kwargs: Any,
+        ) -> str:
+            if not self._failed_once:
+                self._failed_once = True
+                raise QueueNotFoundError("Queue was deleted.")
+            return await super().send_message(
+                queue_name,
+                queue_url,
+                **kwargs,
+            )
+
+    simpleq = SimpleQ()
+    transport = FlakySendTransport()
+    simpleq.transport = transport
+    queue = simpleq.queue("emails", wait_seconds=0)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="emails",
+    )
+
+    message_id = await queue.enqueue(job)
+
+    assert message_id == "mid"
+    assert [name for name, _attributes, _tags in transport.ensured] == [
+        "emails",
+        "emails",
+    ]
+    assert len(transport.sent) == 1
 
 
 @pytest.mark.asyncio
