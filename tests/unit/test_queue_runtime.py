@@ -450,3 +450,47 @@ def test_queue_string_metadata_and_validation(
         )
     assert string_metadata(None) is None
     assert string_metadata(123) == "123"
+
+
+@pytest.mark.asyncio
+async def test_get_dlq_jobs_ignores_visibility_reset_errors_after_yield(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", dlq=True, wait_seconds=0)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="emails",
+    )
+    message = {
+        "Body": job.to_message_body(),
+        "ReceiptHandle": "receipt-dlq",
+        "MessageId": "mid-dlq",
+        "Attributes": {"ApproximateReceiveCount": "1"},
+        "MessageAttributes": {},
+    }
+    simpleq_with_fake_transport.transport.receive_queue = [[message], []]
+
+    original_change_visibility = (
+        simpleq_with_fake_transport.transport.change_message_visibility
+    )
+
+    async def flaky_change_visibility(
+        queue_name: str,
+        queue_url: str,
+        receipt_handle: str,
+        timeout_seconds: int,
+    ) -> None:
+        if timeout_seconds == 0:
+            raise RuntimeError("message no longer available")
+        await original_change_visibility(
+            queue_name, queue_url, receipt_handle, timeout_seconds
+        )
+
+    simpleq_with_fake_transport.transport.change_message_visibility = (
+        flaky_change_visibility
+    )
+
+    jobs = [received async for received in queue.get_dlq_jobs(limit=1)]
+    assert len(jobs) == 1

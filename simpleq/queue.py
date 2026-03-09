@@ -497,7 +497,7 @@ class Queue:
                 yield job
         finally:
             for job in received:
-                await dlq_queue.change_visibility(job, 0)
+                await self._reset_dlq_visibility(dlq_queue, job)
 
     async def redrive_dlq_jobs(self, *, limit: int | None = None) -> int:
         """Move messages from the DLQ back to the primary queue."""
@@ -656,6 +656,18 @@ class Queue:
             int(attributes.get("ApproximateNumberOfMessagesNotVisible", "0")),
             int(attributes.get("ApproximateNumberOfMessagesDelayed", "0")),
         )
+
+    async def _reset_dlq_visibility(self, dlq_queue: Queue, job: Job) -> None:
+        """Best-effort visibility reset for DLQ inspection helpers."""
+        try:
+            await dlq_queue.change_visibility(job, 0)
+        except Exception as exc:
+            self.simpleq.logger.warning(
+                "queue_dlq_visibility_reset_failed",
+                queue_name=dlq_queue.name,
+                job_id=job.job_id,
+                error=str(exc),
+            )
 
     def _validate_message_options(
         self,
