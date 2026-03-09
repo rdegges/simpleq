@@ -40,6 +40,7 @@ class Worker:
         self.poll_interval = poll_interval
         self.receive_timeout_seconds = receive_timeout_seconds
         self._stopping = asyncio.Event()
+        self._in_flight_receives: set[asyncio.Task[tuple[Any, list[Job]]]] = set()
 
     async def work(self, *, burst: bool = False) -> None:
         """Poll configured queues until stopped."""
@@ -50,13 +51,28 @@ class Worker:
             receive_tasks = [
                 asyncio.create_task(self._receive(queue)) for queue in self.queues
             ]
-            for receive_task in asyncio.as_completed(receive_tasks):
-                queue, jobs = await receive_task
-                for job in jobs:
-                    processed = True
-                    tasks.append(
-                        asyncio.create_task(self._process_job(queue, job, semaphore))
-                    )
+            self._in_flight_receives.update(receive_tasks)
+            try:
+                for receive_task in asyncio.as_completed(receive_tasks):
+                    try:
+                        queue, jobs = await receive_task
+                    except asyncio.CancelledError:
+                        if self._stopping.is_set():
+                            continue
+                        raise
+                    for job in jobs:
+                        processed = True
+                        tasks.append(
+                            asyncio.create_task(
+                                self._process_job(queue, job, semaphore)
+                            )
+                        )
+            finally:
+                for receive_task in receive_tasks:
+                    if not receive_task.done():
+                        receive_task.cancel()
+                await asyncio.gather(*receive_tasks, return_exceptions=True)
+                self._in_flight_receives.difference_update(receive_tasks)
             if tasks:
                 await asyncio.gather(*tasks)
             if burst and not processed:
@@ -117,6 +133,8 @@ class Worker:
     async def stop(self) -> None:
         """Signal the worker loop to stop."""
         self._stopping.set()
+        for receive_task in list(self._in_flight_receives):
+            receive_task.cancel()
 
     async def _process_job(
         self, queue: Any, job: Job, semaphore: asyncio.Semaphore
