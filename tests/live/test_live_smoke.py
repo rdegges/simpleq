@@ -253,6 +253,58 @@ async def test_live_fifo_dlq_redrive_smoke() -> None:
 
 @pytest.mark.live
 @pytest.mark.asyncio
+async def test_live_fifo_receive_blocks_later_messages_in_same_group() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=5)
+    queue = simpleq.queue(
+        f"simpleq-live-fifo-lock-{uuid4().hex[:8]}.fifo",
+        fifo=True,
+        content_based_deduplication=False,
+        wait_seconds=0,
+        visibility_timeout=5,
+    )
+    task = simpleq.task(
+        queue=queue,
+        message_group_id=lambda _value: "customer-1",
+        deduplication_id=lambda value: f"dedup-{value}",
+    )(tasks.record_sync)
+
+    try:
+        await task.delay("first")
+        await task.delay("second")
+
+        first_batch = await queue.receive(max_messages=1, wait_seconds=0)
+        assert [job.args[0] for job in first_batch] == ["first"]
+
+        blocked_batch = await queue.receive(max_messages=1, wait_seconds=0)
+        assert blocked_batch == []
+
+        await queue.ack(first_batch[0])
+
+        for _ in range(25):
+            second_batch = await queue.receive(max_messages=1, wait_seconds=0)
+            if second_batch:
+                assert [job.args[0] for job in second_batch] == ["second"]
+                await queue.ack(second_batch[0])
+                break
+            await asyncio.sleep(0.2)
+        else:
+            raise AssertionError("Second FIFO message did not become available.")
+    finally:
+        await queue.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
 async def test_live_unresolvable_task_moves_to_dlq() -> None:
     _load_dotenv(Path(".env"))
     required = [

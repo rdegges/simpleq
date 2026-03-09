@@ -23,6 +23,8 @@ class _StoredMessage:
     body: str
     visible_at: float
     message_attributes: dict[str, dict[str, str]] = field(default_factory=dict)
+    message_group_id: str | None = None
+    deduplication_id: str | None = None
     receive_count: int = 0
     receipt_handle: str | None = None
 
@@ -168,7 +170,7 @@ class InMemoryTransport:
         deduplication_id: str | None = None,
         message_attributes: dict[str, dict[str, str]] | None = None,
     ) -> str:
-        del queue_url, message_group_id
+        del queue_url
         queue = self._require_queue(queue_name)
         deduplication_key = self._deduplication_key(
             queue=queue,
@@ -188,6 +190,8 @@ class InMemoryTransport:
             body=message_body,
             visible_at=time.monotonic() + max(delay_seconds or 0, 0),
             message_attributes=message_attributes or {},
+            message_group_id=message_group_id,
+            deduplication_id=deduplication_id,
         )
         queue.messages.append(message)
         if deduplication_key is not None:
@@ -232,20 +236,35 @@ class InMemoryTransport:
         if timeout is None:
             timeout = int(queue.attributes.get("VisibilityTimeout", "30"))
         received: list[dict[str, Any]] = []
+        blocked_groups = self._blocked_fifo_groups(queue, now=now)
+        selected_groups: set[str] = set()
         for message in queue.messages:
-            if len(received) >= max_messages or message.visible_at > now:
+            if len(received) >= max_messages:
+                break
+            if message.visible_at > now:
+                continue
+            if (
+                message.message_group_id is not None
+                and message.message_group_id in blocked_groups
+                and message.message_group_id not in selected_groups
+            ):
                 continue
             message.receive_count += 1
             message.receipt_handle = uuid4().hex
             message.visible_at = now + timeout
+            if message.message_group_id is not None:
+                selected_groups.add(message.message_group_id)
+            attributes = {"ApproximateReceiveCount": str(message.receive_count)}
+            if message.message_group_id is not None:
+                attributes["MessageGroupId"] = message.message_group_id
+            if message.deduplication_id is not None:
+                attributes["MessageDeduplicationId"] = message.deduplication_id
             received.append(
                 {
                     "Body": message.body,
                     "ReceiptHandle": message.receipt_handle,
                     "MessageId": message.message_id,
-                    "Attributes": {
-                        "ApproximateReceiveCount": str(message.receive_count)
-                    },
+                    "Attributes": attributes,
                     "MessageAttributes": message.message_attributes,
                 }
             )
@@ -305,3 +324,13 @@ class InMemoryTransport:
             content_hash = hashlib.sha256(message_body.encode("utf-8")).hexdigest()
             return f"body:{content_hash}"
         return None
+
+    @staticmethod
+    def _blocked_fifo_groups(queue: _StoredQueue, *, now: float) -> set[str]:
+        if queue.attributes.get("FifoQueue") != "true":
+            return set()
+        return {
+            message.message_group_id
+            for message in queue.messages
+            if message.message_group_id is not None and message.visible_at > now
+        }

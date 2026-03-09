@@ -18,6 +18,8 @@ queue = sq.queue("emails")
 
 - explicit `deduplication_id` values are deduplicated for 5 minutes
 - when `content_based_deduplication=True`, duplicate message bodies are deduplicated
+- once a FIFO message group has an in-flight message, later messages in that
+  group stay hidden until the earlier message is acked or its visibility expires
 
 Recommended targets:
 

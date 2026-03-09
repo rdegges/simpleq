@@ -256,6 +256,41 @@ async def test_fifo_ordering(simpleq_localstack, unique_name, cleanup_queues) ->
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_fifo_receive_blocks_later_messages_in_same_group(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
+    queue = simpleq_localstack.queue(
+        unique_name("fifo-lock") + ".fifo",
+        fifo=True,
+        content_based_deduplication=False,
+        visibility_timeout=5,
+        wait_seconds=0,
+    )
+    cleanup_queues.append(queue)
+    task = simpleq_localstack.task(
+        queue=queue,
+        message_group_id=lambda _value: "customer-1",
+        deduplication_id=lambda value: f"dedup-{value}",
+    )(tasks.record_sync)
+
+    await task.delay("first")
+    await task.delay("second")
+
+    first_batch = await queue.receive(max_messages=1, wait_seconds=0)
+    assert [job.args[0] for job in first_batch] == ["first"]
+
+    blocked_batch = await queue.receive(max_messages=1, wait_seconds=0)
+    assert blocked_batch == []
+
+    await queue.ack(first_batch[0])
+
+    second_batch = await queue.receive(max_messages=1, wait_seconds=0)
+    assert [job.args[0] for job in second_batch] == ["second"]
+    await queue.ack(second_batch[0])
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_standard_delay(simpleq_localstack, unique_name, cleanup_queues) -> None:
     queue = simpleq_localstack.queue(unique_name("delayed"), wait_seconds=0)
     cleanup_queues.append(queue)

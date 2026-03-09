@@ -116,3 +116,38 @@ async def test_inmemory_transport_fifo_content_based_deduplication() -> None:
     assert second_id == first_id
     received = await queue.receive(max_messages=10, wait_seconds=0)
     assert len(received) == 1
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_fifo_blocks_later_messages_in_same_group() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+    queue = simpleq.queue(
+        "orders.fifo",
+        fifo=True,
+        wait_seconds=0,
+        content_based_deduplication=False,
+    )
+    await queue.ensure_exists()
+
+    for value in ("order-1", "order-2"):
+        await queue.enqueue(
+            Job(
+                task_name="tests.fixtures.tasks:record_sync",
+                args=(value,),
+                kwargs={},
+                queue_name=queue.name,
+            ),
+            message_group_id="customer-1",
+            deduplication_id=value,
+        )
+
+    first_batch = await queue.receive(max_messages=1, wait_seconds=0)
+    assert [job.args[0] for job in first_batch] == ["order-1"]
+
+    blocked_batch = await queue.receive(max_messages=1, wait_seconds=0)
+    assert blocked_batch == []
+
+    await queue.ack(first_batch[0])
+
+    second_batch = await queue.receive(max_messages=1, wait_seconds=0)
+    assert [job.args[0] for job in second_batch] == ["order-2"]
