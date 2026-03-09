@@ -24,6 +24,21 @@ class FakeBotoSQSClient:
             {"Id": "2", "MessageId": "batch-2"},
         ]
         self.batch_failed: list[dict[str, str]] = []
+        self.list_queue_pages: dict[str, dict[str, Any]] = {
+            "paged:first": {
+                "QueueUrls": ["https://example.com/paged-1"],
+                "NextToken": "token-1",
+            },
+            "paged:token-1": {"QueueUrls": ["https://example.com/paged-2"]},
+            "loop:first": {
+                "QueueUrls": ["https://example.com/loop-1"],
+                "NextToken": "loop-token",
+            },
+            "loop:loop-token": {
+                "QueueUrls": ["https://example.com/loop-2"],
+                "NextToken": "loop-token",
+            },
+        }
 
     def get_queue_url(self, *, QueueName: str) -> dict[str, str]:
         self.calls.append(("get_queue_url", {"QueueName": QueueName}))
@@ -66,10 +81,28 @@ class FakeBotoSQSClient:
             }
         }
 
-    def list_queues(self, *, QueueNamePrefix: str) -> dict[str, list[str]]:
-        self.calls.append(("list_queues", {"QueueNamePrefix": QueueNamePrefix}))
+    def list_queues(
+        self,
+        *,
+        QueueNamePrefix: str,
+        MaxResults: int | None = None,
+        NextToken: str | None = None,
+    ) -> dict[str, Any]:
+        self.calls.append(
+            (
+                "list_queues",
+                {
+                    "QueueNamePrefix": QueueNamePrefix,
+                    "MaxResults": MaxResults,
+                    "NextToken": NextToken,
+                },
+            )
+        )
         if QueueNamePrefix == "empty":
             return {}
+        if QueueNamePrefix in {"paged", "loop"}:
+            page_key = f"{QueueNamePrefix}:{NextToken or 'first'}"
+            return dict(self.list_queue_pages.get(page_key, {}))
         return {"QueueUrls": ["https://example.com/emails"]}
 
     def list_queue_tags(self, *, QueueUrl: str) -> dict[str, dict[str, str]]:
@@ -278,6 +311,35 @@ async def test_ensure_queue_skips_tag_reconciliation_when_tags_unspecified(
 async def test_require_queue_url_raises(transport: SQSClient) -> None:
     with pytest.raises(QueueNotFoundError):
         await transport.require_queue_url("missing")
+
+
+@pytest.mark.asyncio
+async def test_list_queues_follows_pagination_tokens(transport: SQSClient) -> None:
+    queues = await transport.list_queues("paged")
+
+    assert queues == ["https://example.com/paged-1", "https://example.com/paged-2"]
+    list_calls = [
+        payload
+        for call, payload in transport.client.calls
+        if call == "list_queues" and payload["QueueNamePrefix"] == "paged"
+    ]
+    assert list_calls == [
+        {"QueueNamePrefix": "paged", "MaxResults": 1000, "NextToken": None},
+        {"QueueNamePrefix": "paged", "MaxResults": 1000, "NextToken": "token-1"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_list_queues_stops_on_repeated_next_token(transport: SQSClient) -> None:
+    queues = await transport.list_queues("loop")
+
+    assert queues == ["https://example.com/loop-1", "https://example.com/loop-2"]
+    list_calls = [
+        payload
+        for call, payload in transport.client.calls
+        if call == "list_queues" and payload["QueueNamePrefix"] == "loop"
+    ]
+    assert len(list_calls) == 2
 
 
 @pytest.mark.asyncio

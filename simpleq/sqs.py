@@ -158,13 +158,36 @@ class SQSClient:
 
     async def list_queues(self, prefix: str | None = None) -> list[str]:
         """List queue URLs, optionally by prefix."""
-        response = await self._call(
-            prefix or "global",
-            "list_queues",
-            "list_queues",
-            QueueNamePrefix=prefix or "",
-        )
-        return [str(item) for item in response.get("QueueUrls", [])]
+        queue_urls: list[str] = []
+        next_token: str | None = None
+        seen_tokens: set[str] = set()
+
+        while True:
+            request: dict[str, Any] = {
+                "QueueNamePrefix": prefix or "",
+                "MaxResults": 1000,
+            }
+            if next_token is not None:
+                request["NextToken"] = next_token
+
+            response = await self._call(
+                prefix or "global",
+                "list_queues",
+                "list_queues",
+                **request,
+            )
+            queue_urls.extend(str(item) for item in response.get("QueueUrls", []))
+
+            raw_token = response.get("NextToken")
+            if raw_token is None:
+                break
+            token = str(raw_token).strip()
+            if not token or token in seen_tokens:
+                break
+            seen_tokens.add(token)
+            next_token = token
+
+        return queue_urls
 
     async def list_queue_tags(self, queue_name: str, queue_url: str) -> dict[str, str]:
         """Return the current queue tags."""
