@@ -148,7 +148,7 @@ class Worker:
                 await self._invoke(queue, job)
             except asyncio.CancelledError:
                 if not self._stopping.is_set():
-                    await self._handle_failure(
+                    await self._handle_failure_safely(
                         queue,
                         job,
                         RuntimeError("Task execution cancelled unexpectedly."),
@@ -156,7 +156,7 @@ class Worker:
                     return
                 raise
             except Exception as exc:
-                await self._handle_failure(queue, job, exc)
+                await self._handle_failure_safely(queue, job, exc)
             else:
                 await queue.ack(job)
                 duration_ms = timer.stop()
@@ -183,6 +183,31 @@ class Worker:
                             job_id=str(getattr(job, "job_id", "unknown")),
                             error=str(exc),
                         )
+
+    async def _handle_failure_safely(
+        self,
+        queue: Any,
+        job: Job,
+        exc: BaseException,
+    ) -> None:
+        """Handle job failures without allowing secondary errors to crash workers."""
+        try:
+            await self._handle_failure(queue, job, exc)
+        except Exception as handler_exc:
+            queue_name = str(getattr(queue, "name", "unknown"))
+            self.simpleq.logger.error(
+                "queue_failure_handler_failed",
+                queue_name=queue_name,
+                job_id=str(getattr(job, "job_id", "unknown")),
+                task_name=str(getattr(job, "task_name", "unknown")),
+                original_error=str(exc),
+                handler_error=str(handler_exc),
+            )
+            self.simpleq.metrics.record_processed(
+                queue_name,
+                status="failure_handler_error",
+                duration_seconds=0.0,
+            )
 
     def _heartbeat(self, queue: Any, job: Job) -> asyncio.Task[None]:
         async def extend() -> None:

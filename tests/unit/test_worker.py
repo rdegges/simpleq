@@ -120,6 +120,45 @@ async def test_worker_handles_non_retryable_failure() -> None:
     assert len(queue.acked) == 1
 
 
+@pytest.mark.asyncio
+async def test_worker_does_not_crash_when_failure_handler_raises() -> None:
+    simpleq = SimpleQ()
+    definition = TaskDefinition(
+        name=task_name_for(record_sync),
+        func=record_sync,
+        retry_exceptions=(RuntimeError,),
+    )
+    simpleq.registry.register(definition)
+
+    class BrokenRetryQueue(FakeQueue):
+        async def change_visibility(self, job: Job, timeout_seconds: int) -> None:
+            raise RuntimeError("change_visibility failed")
+
+    queue = BrokenRetryQueue(simpleq=simpleq)
+    worker = Worker(simpleq, [queue], concurrency=1)
+    job = Job(
+        task_name=definition.name,
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+
+    async def fail_invoke(_queue: Any, _job: Job) -> None:
+        raise RuntimeError("task execution failed")
+
+    worker._invoke = fail_invoke  # type: ignore[method-assign]
+
+    await worker._process_job(queue, job, asyncio.Semaphore(1))
+
+    assert queue.acked == []
+    assert queue.dlq_moves == []
+    processed_samples = simpleq.metrics.jobs_processed.collect()[0].samples
+    assert any(
+        sample.labels.get("status") == "failure_handler_error"
+        for sample in processed_samples
+    )
+
+
 def test_retry_delay_strategies() -> None:
     simpleq = SimpleQ(backoff_strategy="exponential")
     queue = FakeQueue(simpleq=simpleq)
