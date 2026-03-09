@@ -87,9 +87,25 @@ def _endpoint_reachable(url: str) -> bool:
         return False
 
 
+def resolve_endpoint_url_from_env() -> str | None:
+    """Return an explicitly configured SQS endpoint from environment variables."""
+    for env_name in (
+        "SIMPLEQ_ENDPOINT_URL",
+        "AWS_ENDPOINT_URL_SQS",
+        "AWS_ENDPOINT_URL",
+    ):
+        value = os.getenv(env_name)
+        if value is None:
+            continue
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    return None
+
+
 def detect_localstack_endpoint() -> str | None:
     """Return a sensible LocalStack endpoint for dev and CI environments."""
-    if endpoint := os.getenv("SIMPLEQ_ENDPOINT_URL"):
+    if endpoint := resolve_endpoint_url_from_env():
         return endpoint
 
     if hostname := os.getenv("LOCALSTACK_HOSTNAME"):
@@ -165,7 +181,11 @@ class SimpleQConfig:
             or os.getenv("AWS_DEFAULT_REGION")
             or config.region
         )
-        config.endpoint_url = endpoint_url or detect_localstack_endpoint()
+        config.endpoint_url = (
+            endpoint_url
+            or resolve_endpoint_url_from_env()
+            or detect_localstack_endpoint()
+        )
         config.batch_size = _coalesce_int(
             batch_size, "SIMPLEQ_BATCH_SIZE", config.batch_size
         )

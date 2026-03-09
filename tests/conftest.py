@@ -58,6 +58,8 @@ def clear_simpleq_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         "CI",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
+        "AWS_ENDPOINT_URL",
+        "AWS_ENDPOINT_URL_SQS",
         "SIMPLEQ_BATCH_SIZE",
         "SIMPLEQ_WAIT_SECONDS",
         "SIMPLEQ_VISIBILITY_TIMEOUT",

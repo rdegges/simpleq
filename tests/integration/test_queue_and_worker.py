@@ -39,6 +39,36 @@ async def test_standard_queue_round_trip(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_standard_queue_round_trip_with_aws_endpoint_env(
+    localstack_endpoint: str,
+    unique_name,
+    cleanup_queues,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SIMPLEQ_ENDPOINT_URL", raising=False)
+    monkeypatch.setenv("AWS_ENDPOINT_URL_SQS", localstack_endpoint)
+
+    simpleq = SimpleQ(wait_seconds=0, visibility_timeout=2)
+    queue = simpleq.queue(
+        unique_name("aws-endpoint-env"),
+        dlq=True,
+        visibility_timeout=2,
+        wait_seconds=0,
+    )
+    cleanup_queues.append(queue)
+
+    task = simpleq.task(queue=queue)(tasks.record_async)
+    await task.delay("hello")
+
+    worker = simpleq.worker(queues=[queue], concurrency=1, poll_interval=0.1)
+    await worker.work(burst=True)
+
+    assert tasks.LOG == [("async", "hello")]
+    assert simpleq.config.endpoint_url == localstack_endpoint
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_ensure_exists_reconciles_existing_queue_attributes(
     localstack_endpoint: str,
     unique_name,

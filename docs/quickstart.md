@@ -13,6 +13,9 @@ docker run -d --name simpleq-localstack -p 4566:4566 localstack/localstack
 export SIMPLEQ_ENDPOINT_URL=http://localhost:4566
 ```
 
+`AWS_ENDPOINT_URL_SQS` and `AWS_ENDPOINT_URL` are also supported if you prefer
+to share the same endpoint configuration with other AWS tooling.
+
 ## Sync-first example
 
 ```python

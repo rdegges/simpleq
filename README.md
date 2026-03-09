@@ -27,6 +27,10 @@ docker run -d --name simpleq-localstack -p 4566:4566 localstack/localstack
 export SIMPLEQ_ENDPOINT_URL=http://localhost:4566
 ```
 
+SimpleQ also honors `AWS_ENDPOINT_URL_SQS` and `AWS_ENDPOINT_URL`, so teams can
+share one endpoint configuration across SimpleQ, boto3, the AWS CLI, and
+LocalStack tooling.
+
 Boolean environment flags are strict. Use `1/0`, `true/false`, `yes/no`, or
 `on/off` for values such as `SIMPLEQ_ENABLE_METRICS`,
 `SIMPLEQ_ENABLE_TRACING`, and `SIMPLEQ_COST_TRACKING`.

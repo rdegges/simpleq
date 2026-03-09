@@ -20,6 +20,38 @@ def test_detect_localstack_uses_explicit_env(monkeypatch: pytest.MonkeyPatch) ->
     assert detect_localstack_endpoint() == "http://localhost:9999"
 
 
+def test_from_overrides_uses_service_specific_aws_endpoint_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AWS_ENDPOINT_URL_SQS", "http://localhost:4567")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.endpoint_url == "http://localhost:4567"
+
+
+def test_from_overrides_uses_global_aws_endpoint_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AWS_ENDPOINT_URL", "http://localhost:4568")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.endpoint_url == "http://localhost:4568"
+
+
+def test_from_overrides_prefers_simpleq_endpoint_over_aws_endpoint_envs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_ENDPOINT_URL", "http://localhost:9999")
+    monkeypatch.setenv("AWS_ENDPOINT_URL_SQS", "http://localhost:4567")
+    monkeypatch.setenv("AWS_ENDPOINT_URL", "http://localhost:4568")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.endpoint_url == "http://localhost:9999"
+
+
 def test_detect_localstack_uses_localstack_hostname(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

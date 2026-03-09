@@ -7,6 +7,7 @@ You created the client successfully, but the first real SQS call still needs cre
 Fix it with one of:
 
 - set `SIMPLEQ_ENDPOINT_URL=http://localhost:4566`
+- or set `AWS_ENDPOINT_URL_SQS=http://localhost:4566`
 - provide AWS credentials and region
 - use `InMemoryTransport` in tests
 
