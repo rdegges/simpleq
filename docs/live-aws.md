@@ -17,6 +17,9 @@ The repository ignores `.env`, and the test suite never creates credentials auto
 ## IAM policy
 
 Use `tests/live/iam-policy.json` as the baseline policy document.
+The smoke suite now reconciles queue tags as part of queue setup, so the IAM
+principal also needs `sqs:ListQueueTags`, `sqs:TagQueue`, and
+`sqs:UntagQueue`.
 
 ## Running the live suite
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import json
 import os
@@ -11,6 +12,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from botocore.exceptions import ClientError
 
 from simpleq import SimpleQ
 from simpleq.exceptions import QueueValidationError
@@ -33,6 +35,20 @@ def _live_simpleq(**overrides: object) -> SimpleQ:
     """Build a SimpleQ client without auto-detecting LocalStack."""
     with patch("simpleq.config.detect_localstack_endpoint", return_value=None):
         return SimpleQ(**overrides)
+
+
+def _skip_if_missing_tag_permissions(exc: ClientError) -> None:
+    error = exc.response.get("Error", {})
+    if error.get("Code") != "AccessDenied":
+        return
+    message = str(error.get("Message", "")).lower()
+    required_actions = ("sqs:tagqueue", "sqs:untagqueue", "sqs:listqueuetags")
+    if any(action in message for action in required_actions):
+        pytest.skip(
+            "Live AWS principal is missing SQS tag permissions required for "
+            "queue tag reconciliation. Update the IAM policy in "
+            "tests/live/iam-policy.json to run this smoke test."
+        )
 
 
 @pytest.mark.live
@@ -81,7 +97,7 @@ async def test_live_standard_and_fifo_smoke(tmp_path) -> None:
 
 @pytest.mark.live
 @pytest.mark.asyncio
-async def test_live_existing_queue_attributes_are_reconciled() -> None:
+async def test_live_existing_queue_attributes_and_tags_are_reconciled() -> None:
     _load_dotenv(Path(".env"))
     required = [
         "AWS_ACCESS_KEY_ID",
@@ -99,8 +115,13 @@ async def test_live_existing_queue_attributes_are_reconciled() -> None:
         dlq=True,
         wait_seconds=0,
         visibility_timeout=2,
+        tags={"env": "dev", "owner": "legacy"},
     )
-    await initial_queue.ensure_exists()
+    try:
+        await initial_queue.ensure_exists()
+    except ClientError as exc:
+        _skip_if_missing_tag_permissions(exc)
+        raise
 
     updated_simpleq = _live_simpleq(wait_seconds=5, visibility_timeout=9)
     updated_queue = updated_simpleq.queue(
@@ -108,10 +129,15 @@ async def test_live_existing_queue_attributes_are_reconciled() -> None:
         dlq=True,
         wait_seconds=5,
         visibility_timeout=9,
+        tags={"env": "prod", "team": "platform"},
     )
 
     try:
-        queue_url = await updated_queue.ensure_exists()
+        try:
+            queue_url = await updated_queue.ensure_exists()
+        except ClientError as exc:
+            _skip_if_missing_tag_permissions(exc)
+            raise
         attributes = await updated_simpleq.transport.get_queue_attributes(
             updated_queue.name,
             queue_url,
@@ -126,6 +152,15 @@ async def test_live_existing_queue_attributes_are_reconciled() -> None:
         assert attributes["VisibilityTimeout"] == "9"
         assert attributes["ReceiveMessageWaitTimeSeconds"] == "5"
         assert initial_queue.dlq_name in redrive_policy["deadLetterTargetArn"]
+        try:
+            tags = await asyncio.to_thread(
+                updated_simpleq.transport.client.list_queue_tags,
+                QueueUrl=queue_url,
+            )
+        except ClientError as exc:
+            _skip_if_missing_tag_permissions(exc)
+            raise
+        assert tags["Tags"] == {"env": "prod", "team": "platform"}
     finally:
         await updated_queue.delete()
 

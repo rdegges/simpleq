@@ -66,8 +66,8 @@ class InMemoryTransport:
         queue = self._queues.setdefault(queue_name, _StoredQueue(name=queue_name))
         if attributes:
             queue.attributes.update(attributes)
-        if tags:
-            queue.tags.update(tags)
+        if tags is not None:
+            queue.tags = dict(tags)
         return queue.url
 
     async def create_queue(
@@ -122,6 +122,30 @@ class InMemoryTransport:
             name for name in self._queues if prefix is None or name.startswith(prefix)
         )
         return [self._queues[name].url for name in names]
+
+    async def list_queue_tags(self, queue_name: str, queue_url: str) -> dict[str, str]:
+        del queue_url
+        return dict(self._require_queue(queue_name).tags)
+
+    async def tag_queue(
+        self,
+        queue_name: str,
+        queue_url: str,
+        tags: dict[str, str],
+    ) -> None:
+        del queue_url
+        self._require_queue(queue_name).tags.update(tags)
+
+    async def untag_queue(
+        self,
+        queue_name: str,
+        queue_url: str,
+        tag_keys: list[str],
+    ) -> None:
+        del queue_url
+        queue = self._require_queue(queue_name)
+        for key in tag_keys:
+            queue.tags.pop(key, None)
 
     async def delete_queue(self, queue_name: str, queue_url: str) -> None:
         del queue_url

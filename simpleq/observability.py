@@ -16,11 +16,14 @@ OperationName = Literal[
     "delete_message",
     "delete_queue",
     "get_queue_attributes",
+    "list_queue_tags",
     "list_queues",
     "purge_queue",
     "receive_message",
     "send_message",
     "set_queue_attributes",
+    "tag_queue",
+    "untag_queue",
 ]
 
 

@@ -126,6 +126,8 @@ class SQSClient:
         if url := await self.get_queue_url(queue_name):
             if attributes:
                 await self.set_queue_attributes(queue_name, url, attributes)
+            if tags is not None:
+                await self.reconcile_queue_tags(queue_name, url, tags)
             return url
         return await self.create_queue(queue_name, attributes=attributes, tags=tags)
 
@@ -163,6 +165,67 @@ class SQSClient:
             QueueNamePrefix=prefix or "",
         )
         return [str(item) for item in response.get("QueueUrls", [])]
+
+    async def list_queue_tags(self, queue_name: str, queue_url: str) -> dict[str, str]:
+        """Return the current queue tags."""
+        response = await self._call(
+            queue_name,
+            "list_queue_tags",
+            "list_queue_tags",
+            QueueUrl=queue_url,
+        )
+        return dict(response.get("Tags", {}))
+
+    async def tag_queue(
+        self,
+        queue_name: str,
+        queue_url: str,
+        tags: dict[str, str],
+    ) -> None:
+        """Add or update queue tags."""
+        await self._call(
+            queue_name,
+            "tag_queue",
+            "tag_queue",
+            QueueUrl=queue_url,
+            Tags=tags,
+        )
+
+    async def untag_queue(
+        self,
+        queue_name: str,
+        queue_url: str,
+        tag_keys: list[str],
+    ) -> None:
+        """Remove queue tags by key."""
+        await self._call(
+            queue_name,
+            "untag_queue",
+            "untag_queue",
+            QueueUrl=queue_url,
+            TagKeys=tag_keys,
+        )
+
+    async def reconcile_queue_tags(
+        self,
+        queue_name: str,
+        queue_url: str,
+        desired_tags: dict[str, str],
+    ) -> None:
+        """Reconcile an existing queue's tags to the desired set."""
+        current_tags = await self.list_queue_tags(queue_name, queue_url)
+        tags_to_add = {
+            key: value
+            for key, value in desired_tags.items()
+            if current_tags.get(key) != value
+        }
+        tag_keys_to_remove = sorted(
+            key for key in current_tags if key not in desired_tags
+        )
+        if tags_to_add:
+            await self.tag_queue(queue_name, queue_url, tags_to_add)
+        if tag_keys_to_remove:
+            await self.untag_queue(queue_name, queue_url, tag_keys_to_remove)
 
     async def delete_queue(self, queue_name: str, queue_url: str) -> None:
         """Delete a queue and drop its cached URL."""

@@ -18,6 +18,7 @@ class FakeBotoSQSClient:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.tags_by_url: dict[str, dict[str, str]] = {}
         self.batch_successful: list[dict[str, str]] = [
             {"Id": "1", "MessageId": "batch-1"},
             {"Id": "2", "MessageId": "batch-2"},
@@ -35,13 +36,15 @@ class FakeBotoSQSClient:
     def create_queue(
         self, *, QueueName: str, Attributes: dict[str, str], tags: dict[str, str]
     ) -> dict[str, str]:
+        queue_url = f"https://example.com/{QueueName}"
         self.calls.append(
             (
                 "create_queue",
                 {"QueueName": QueueName, "Attributes": Attributes, "tags": tags},
             )
         )
-        return {"QueueUrl": f"https://example.com/{QueueName}"}
+        self.tags_by_url[queue_url] = dict(tags)
+        return {"QueueUrl": queue_url}
 
     def set_queue_attributes(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("set_queue_attributes", kwargs))
@@ -68,6 +71,23 @@ class FakeBotoSQSClient:
         if QueueNamePrefix == "empty":
             return {}
         return {"QueueUrls": ["https://example.com/emails"]}
+
+    def list_queue_tags(self, *, QueueUrl: str) -> dict[str, dict[str, str]]:
+        self.calls.append(("list_queue_tags", {"QueueUrl": QueueUrl}))
+        return {"Tags": dict(self.tags_by_url.get(QueueUrl, {}))}
+
+    def tag_queue(self, *, QueueUrl: str, Tags: dict[str, str]) -> dict[str, Any]:
+        self.calls.append(("tag_queue", {"QueueUrl": QueueUrl, "Tags": Tags}))
+        queue_tags = self.tags_by_url.setdefault(QueueUrl, {})
+        queue_tags.update(Tags)
+        return {}
+
+    def untag_queue(self, *, QueueUrl: str, TagKeys: list[str]) -> dict[str, Any]:
+        self.calls.append(("untag_queue", {"QueueUrl": QueueUrl, "TagKeys": TagKeys}))
+        queue_tags = self.tags_by_url.setdefault(QueueUrl, {})
+        for key in TagKeys:
+            queue_tags.pop(key, None)
+        return {}
 
     def delete_queue(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("delete_queue", kwargs))
@@ -204,6 +224,54 @@ async def test_ensure_queue_reconciles_existing_attributes(
         },
     ) in transport.client.calls
     assert not any(call[0] == "create_queue" for call in transport.client.calls)
+
+
+@pytest.mark.asyncio
+async def test_ensure_queue_reconciles_existing_tags(transport: SQSClient) -> None:
+    transport.client.tags_by_url["https://example.com/emails"] = {
+        "env": "dev",
+        "owner": "legacy",
+    }
+
+    url = await transport.ensure_queue(
+        "emails",
+        tags={"env": "prod", "team": "platform"},
+    )
+
+    assert url == "https://example.com/emails"
+    assert ("list_queue_tags", {"QueueUrl": "https://example.com/emails"}) in (
+        transport.client.calls
+    )
+    assert (
+        "tag_queue",
+        {
+            "QueueUrl": "https://example.com/emails",
+            "Tags": {"env": "prod", "team": "platform"},
+        },
+    ) in transport.client.calls
+    assert (
+        "untag_queue",
+        {
+            "QueueUrl": "https://example.com/emails",
+            "TagKeys": ["owner"],
+        },
+    ) in transport.client.calls
+    assert transport.client.tags_by_url["https://example.com/emails"] == {
+        "env": "prod",
+        "team": "platform",
+    }
+
+
+@pytest.mark.asyncio
+async def test_ensure_queue_skips_tag_reconciliation_when_tags_unspecified(
+    transport: SQSClient,
+) -> None:
+    await transport.ensure_queue("emails", attributes={"VisibilityTimeout": "45"})
+
+    assert not any(
+        call[0] in {"list_queue_tags", "tag_queue", "untag_queue"}
+        for call in transport.client.calls
+    )
 
 
 @pytest.mark.asyncio

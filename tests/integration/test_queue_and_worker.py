@@ -89,6 +89,47 @@ async def test_ensure_exists_reconciles_existing_queue_attributes(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_ensure_exists_reconciles_existing_queue_tags(
+    localstack_endpoint: str,
+    unique_name,
+    cleanup_queues,
+) -> None:
+    queue_name = unique_name("reconcile-tags")
+    initial_simpleq = SimpleQ(
+        endpoint_url=localstack_endpoint,
+        wait_seconds=0,
+        visibility_timeout=2,
+    )
+    initial_queue = initial_simpleq.queue(
+        queue_name,
+        wait_seconds=0,
+        tags={"env": "dev", "owner": "legacy"},
+    )
+    cleanup_queues.append(initial_queue)
+    await initial_queue.ensure_exists()
+
+    updated_simpleq = SimpleQ(
+        endpoint_url=localstack_endpoint,
+        wait_seconds=0,
+        visibility_timeout=2,
+    )
+    updated_queue = updated_simpleq.queue(
+        queue_name,
+        wait_seconds=0,
+        tags={"env": "prod", "team": "platform"},
+    )
+
+    queue_url = await updated_queue.ensure_exists()
+    response = await asyncio.to_thread(
+        updated_simpleq.transport.client.list_queue_tags,
+        QueueUrl=queue_url,
+    )
+
+    assert response["Tags"] == {"env": "prod", "team": "platform"}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_worker_lazy_import_preserves_schema_metadata(
     localstack_endpoint: str,
     unique_name,

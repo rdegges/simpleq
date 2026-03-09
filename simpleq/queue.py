@@ -123,6 +123,7 @@ class Queue:
         self.wait_seconds = (
             self.config.wait_seconds if wait_seconds is None else wait_seconds
         )
+        self._tags_configured = tags is not None
         self.tags = tags or {}
         if self.dlq and (
             self.max_retries < 1 or self.max_retries > _MAX_DLQ_MAX_RECEIVE_COUNT
@@ -169,7 +170,7 @@ class Queue:
             self._dlq_url = await self.simpleq.transport.ensure_queue(
                 self.dlq_name,
                 attributes=dlq_attributes,
-                tags=self.tags,
+                tags=self.tags if self._tags_configured else None,
             )
             dlq_arn = await self.simpleq.transport.queue_arn(
                 self.dlq_name, self._dlq_url
@@ -185,7 +186,7 @@ class Queue:
         self._queue_url = await self.simpleq.transport.ensure_queue(
             self.name,
             attributes=attributes,
-            tags=self.tags,
+            tags=self.tags if self._tags_configured else None,
         )
         return self._queue_url
 
@@ -499,7 +500,7 @@ class Queue:
                 content_based_deduplication=self.content_based_deduplication,
                 visibility_timeout=self.visibility_timeout,
                 wait_seconds=self.wait_seconds,
-                tags=dict(self.tags),
+                tags=dict(self.tags) if self._tags_configured else None,
             ),
         )
 

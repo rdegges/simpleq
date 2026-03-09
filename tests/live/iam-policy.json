@@ -10,13 +10,16 @@
         "sqs:GetQueueAttributes",
         "sqs:GetQueueUrl",
         "sqs:ListQueues",
+        "sqs:ListQueueTags",
         "sqs:PurgeQueue",
         "sqs:ReceiveMessage",
         "sqs:DeleteMessage",
         "sqs:ChangeMessageVisibility",
         "sqs:SendMessage",
         "sqs:SendMessageBatch",
-        "sqs:SetQueueAttributes"
+        "sqs:SetQueueAttributes",
+        "sqs:TagQueue",
+        "sqs:UntagQueue"
       ],
       "Resource": "*"
     }

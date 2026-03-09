@@ -171,7 +171,7 @@ class SimpleQ:
             content_based_deduplication=queue.content_based_deduplication,
             visibility_timeout=queue.visibility_timeout,
             wait_seconds=queue.wait_seconds,
-            tags=dict(queue.tags),
+            tags=dict(queue.tags) if queue._tags_configured else None,
         )
 
     def resolve_queue(self, queue_ref: Any | None) -> Queue:
