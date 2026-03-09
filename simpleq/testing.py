@@ -6,6 +6,7 @@ behavior needed for unit tests, examples, and local development helpers.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import time
 from dataclasses import dataclass, field
@@ -229,46 +230,24 @@ class InMemoryTransport:
         wait_seconds: int,
         visibility_timeout: int | None,
     ) -> list[dict[str, Any]]:
-        del queue_url, wait_seconds
+        del queue_url
         queue = self._require_queue(queue_name)
-        now = time.monotonic()
-        timeout = visibility_timeout
-        if timeout is None:
-            timeout = int(queue.attributes.get("VisibilityTimeout", "30"))
-        received: list[dict[str, Any]] = []
-        blocked_groups = self._blocked_fifo_groups(queue, now=now)
-        selected_groups: set[str] = set()
-        for message in queue.messages:
-            if len(received) >= max_messages:
-                break
-            if message.visible_at > now:
-                continue
-            if (
-                message.message_group_id is not None
-                and message.message_group_id in blocked_groups
-                and message.message_group_id not in selected_groups
-            ):
-                continue
-            message.receive_count += 1
-            message.receipt_handle = uuid4().hex
-            message.visible_at = now + timeout
-            if message.message_group_id is not None:
-                selected_groups.add(message.message_group_id)
-            attributes = {"ApproximateReceiveCount": str(message.receive_count)}
-            if message.message_group_id is not None:
-                attributes["MessageGroupId"] = message.message_group_id
-            if message.deduplication_id is not None:
-                attributes["MessageDeduplicationId"] = message.deduplication_id
-            received.append(
-                {
-                    "Body": message.body,
-                    "ReceiptHandle": message.receipt_handle,
-                    "MessageId": message.message_id,
-                    "Attributes": attributes,
-                    "MessageAttributes": message.message_attributes,
-                }
+        timeout = self._effective_visibility_timeout(
+            queue, visibility_timeout=visibility_timeout
+        )
+        deadline = time.monotonic() + max(wait_seconds, 0)
+        while True:
+            received = self._receive_visible_messages(
+                queue,
+                max_messages=max_messages,
+                visibility_timeout=timeout,
             )
-        return received
+            if received:
+                return received
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return []
+            await asyncio.sleep(min(0.05, remaining))
 
     async def delete_message(
         self, queue_name: str, queue_url: str, receipt_handle: str
@@ -300,6 +279,59 @@ class InMemoryTransport:
         if queue is None:
             raise KeyError(f"Queue '{queue_name}' is not defined.")
         return queue
+
+    @staticmethod
+    def _effective_visibility_timeout(
+        queue: _StoredQueue,
+        *,
+        visibility_timeout: int | None,
+    ) -> int:
+        if visibility_timeout is not None:
+            return visibility_timeout
+        return int(queue.attributes.get("VisibilityTimeout", "30"))
+
+    def _receive_visible_messages(
+        self,
+        queue: _StoredQueue,
+        *,
+        max_messages: int,
+        visibility_timeout: int,
+    ) -> list[dict[str, Any]]:
+        now = time.monotonic()
+        received: list[dict[str, Any]] = []
+        blocked_groups = self._blocked_fifo_groups(queue, now=now)
+        selected_groups: set[str] = set()
+        for message in queue.messages:
+            if len(received) >= max_messages:
+                break
+            if message.visible_at > now:
+                continue
+            if (
+                message.message_group_id is not None
+                and message.message_group_id in blocked_groups
+                and message.message_group_id not in selected_groups
+            ):
+                continue
+            message.receive_count += 1
+            message.receipt_handle = uuid4().hex
+            message.visible_at = now + visibility_timeout
+            if message.message_group_id is not None:
+                selected_groups.add(message.message_group_id)
+            attributes = {"ApproximateReceiveCount": str(message.receive_count)}
+            if message.message_group_id is not None:
+                attributes["MessageGroupId"] = message.message_group_id
+            if message.deduplication_id is not None:
+                attributes["MessageDeduplicationId"] = message.deduplication_id
+            received.append(
+                {
+                    "Body": message.body,
+                    "ReceiptHandle": message.receipt_handle,
+                    "MessageId": message.message_id,
+                    "Attributes": attributes,
+                    "MessageAttributes": message.message_attributes,
+                }
+            )
+        return received
 
     @staticmethod
     def _purge_expired_deduplication_entries(queue: _StoredQueue, *, now: float) -> None:

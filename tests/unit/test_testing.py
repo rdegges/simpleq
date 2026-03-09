@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from simpleq import SimpleQ
@@ -151,3 +153,27 @@ async def test_inmemory_transport_fifo_blocks_later_messages_in_same_group() -> 
 
     second_batch = await queue.receive(max_messages=1, wait_seconds=0)
     assert [job.args[0] for job in second_batch] == ["order-2"]
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_long_poll_waits_for_delayed_message() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+    queue = simpleq.queue("emails", wait_seconds=0)
+    await queue.ensure_exists()
+
+    await queue.enqueue(
+        Job(
+            task_name="tests.fixtures.tasks:record_sync",
+            args=("delayed",),
+            kwargs={},
+            queue_name=queue.name,
+        ),
+        delay_seconds=1,
+    )
+
+    start = time.monotonic()
+    received = await queue.receive(max_messages=1, wait_seconds=2)
+    elapsed = time.monotonic() - start
+
+    assert [job.args[0] for job in received] == ["delayed"]
+    assert elapsed >= 0.8

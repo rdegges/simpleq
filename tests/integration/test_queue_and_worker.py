@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import sys
+import time
 
 import pytest
 
@@ -223,6 +224,32 @@ async def test_batch_enqueue(simpleq_localstack, unique_name, cleanup_queues) ->
 
     received = await queue.receive(max_messages=3, wait_seconds=0)
     assert {job.args[0] for job in received} == {"value-0", "value-1", "value-2"}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_receive_waits_for_delayed_message_visibility(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
+    queue = simpleq_localstack.queue(unique_name("long-poll"), wait_seconds=0)
+    cleanup_queues.append(queue)
+    await queue.enqueue(
+        Job(
+            task_name="tests.fixtures.tasks:record_sync",
+            args=("delayed",),
+            kwargs={},
+            queue_name=queue.name,
+        ),
+        delay_seconds=1,
+    )
+
+    start = time.monotonic()
+    received = await queue.receive(max_messages=1, wait_seconds=2)
+    elapsed = time.monotonic() - start
+
+    assert [job.args[0] for job in received] == ["delayed"]
+    assert elapsed >= 0.8
+    await queue.ack(received[0])
 
 
 @pytest.mark.integration

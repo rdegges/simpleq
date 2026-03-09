@@ -7,6 +7,7 @@ import importlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -231,6 +232,42 @@ async def test_live_message_attributes_support_values_over_256_kib() -> None:
         received = await queue.receive(max_messages=1, wait_seconds=0)
         assert len(received) == 1
         assert received[0].message_attributes["trace"] == large_value
+        await queue.ack(received[0])
+    finally:
+        await queue.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_live_receive_waits_for_delayed_message_visibility() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
+    queue = simpleq.queue(f"simpleq-live-long-poll-{uuid4().hex[:8]}", wait_seconds=0)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("delayed",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+
+    try:
+        await queue.enqueue(job, delay_seconds=1)
+
+        start = time.monotonic()
+        received = await queue.receive(max_messages=1, wait_seconds=2)
+        elapsed = time.monotonic() - start
+
+        assert [item.args[0] for item in received] == ["delayed"]
+        assert elapsed >= 0.8
         await queue.ack(received[0])
     finally:
         await queue.delete()

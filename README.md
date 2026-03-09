@@ -37,6 +37,8 @@ Numeric queue/runtime settings are validated eagerly against SQS limits:
 Queue creation also reconciles `MaximumMessageSize=1048576` so SimpleQ queues
 can use the current SQS `1 MiB` payload limit, and enqueue operations fail fast
 locally if a single message or batch exceeds that budget.
+The built-in `InMemoryTransport` also mirrors SQS long polling closely enough to
+wait for delayed messages that become visible during `receive(..., wait_seconds=...)`.
 
 You can set `default_queue_name` (or `SIMPLEQ_DEFAULT_QUEUE`) to either a
 standard queue (for example `jobs`) or FIFO queue (for example `jobs.fifo`).
