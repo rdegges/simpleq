@@ -83,6 +83,28 @@ def test_queue_validates_fifo_options() -> None:
         )
 
 
+def test_standard_queue_rejects_fifo_routing_options() -> None:
+    queue = SimpleQ().queue("emails")
+
+    with pytest.raises(
+        QueueValidationError, match="Standard queues do not support message_group_id"
+    ):
+        queue._validate_message_options(
+            delay_seconds=0,
+            message_group_id="group",
+            deduplication_id=None,
+        )
+
+    with pytest.raises(
+        QueueValidationError, match="Standard queues do not support deduplication_id"
+    ):
+        queue._validate_message_options(
+            delay_seconds=0,
+            message_group_id=None,
+            deduplication_id="dedup-1",
+        )
+
+
 def test_queue_copies_configured_tags() -> None:
     tags = {"team": "backend"}
 
@@ -239,3 +261,24 @@ async def test_enqueue_many_rejects_batches_larger_than_1_mib() -> None:
         match="batch payloads must total at most 1048576 bytes",
     ):
         await queue.enqueue_many(entries)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_rejects_fifo_routing_on_standard_queue() -> None:
+    queue = SimpleQ().queue("emails")
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+
+    with pytest.raises(
+        QueueValidationError, match="Standard queues do not support message_group_id"
+    ):
+        await queue.enqueue(job, message_group_id="group-1")
+
+    with pytest.raises(
+        QueueValidationError, match="Standard queues do not support deduplication_id"
+    ):
+        await queue.enqueue(job, deduplication_id="dedup-1")

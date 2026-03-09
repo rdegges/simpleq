@@ -752,6 +752,15 @@ class Queue:
                 "deduplication_id",
                 deduplication_id,
             )
+        else:
+            if message_group_id is not None:
+                raise QueueValidationError(
+                    "Standard queues do not support message_group_id."
+                )
+            if deduplication_id is not None:
+                raise QueueValidationError(
+                    "Standard queues do not support deduplication_id."
+                )
 
     def _validate_receive_options(
         self,

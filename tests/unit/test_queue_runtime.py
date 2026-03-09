@@ -321,8 +321,6 @@ async def test_queue_batch_dlq_and_misc_branches(
             BatchEntry(
                 base_job,
                 delay_seconds=1,
-                message_group_id="group-1",
-                deduplication_id="dedup-1",
                 attributes={"source": "tests"},
             )
         ]
