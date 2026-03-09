@@ -83,6 +83,36 @@ def test_queue_validates_fifo_options() -> None:
         )
 
 
+def test_queue_copies_configured_tags() -> None:
+    tags = {"team": "backend"}
+
+    queue = SimpleQ().queue("emails", tags=tags)
+    tags["team"] = "platform"
+
+    assert queue.tags == {"team": "backend"}
+
+
+@pytest.mark.parametrize(
+    ("tags", "message"),
+    [
+        ({"": "value"}, "non-empty strings"),
+        ({"aws:owner": "value"}, "must not start with 'aws:'"),
+        ({"a" * 129: "value"}, "128 characters or fewer"),
+        ({"owner": "v" * 257}, "256 characters or fewer"),
+    ],
+)
+def test_queue_rejects_invalid_tags(tags: dict[str, str], message: str) -> None:
+    with pytest.raises(QueueValidationError, match=message):
+        SimpleQ().queue("emails", tags=tags)
+
+
+def test_queue_rejects_more_than_fifty_tags() -> None:
+    tags = {f"key-{index}": "value" for index in range(51)}
+
+    with pytest.raises(QueueValidationError, match="at most 50"):
+        SimpleQ().queue("emails", tags=tags)
+
+
 @pytest.mark.parametrize(
     ("message_group_id", "deduplication_id", "message"),
     [

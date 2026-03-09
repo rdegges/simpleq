@@ -33,6 +33,9 @@ _MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES = 1_048_576
 _MAX_MESSAGE_SIZE_BYTES = 1_048_576
 _MAX_FIFO_ROUTING_ID_LENGTH = 128
 _MAX_DLQ_MAX_RECEIVE_COUNT = 1000
+_MAX_QUEUE_TAGS = 50
+_MAX_TAG_KEY_LENGTH = 128
+_MAX_TAG_VALUE_LENGTH = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,7 +158,7 @@ class Queue:
             self.config.wait_seconds if wait_seconds is None else wait_seconds
         )
         self._tags_configured = tags is not None
-        self.tags = tags or {}
+        self.tags = validate_queue_tags(tags)
         if self.dlq and (
             self.max_retries < 1 or self.max_retries > _MAX_DLQ_MAX_RECEIVE_COUNT
         ):
@@ -743,6 +746,35 @@ def normalize_queue_name(name: str, *, fifo: bool) -> str:
             "Queue names may only contain letters, numbers, hyphens, and underscores."
         )
     return name
+
+
+def validate_queue_tags(tags: dict[str, str] | None) -> dict[str, str]:
+    """Validate queue tags against SQS limits and return a stable copy."""
+    if tags is None:
+        return {}
+    if len(tags) > _MAX_QUEUE_TAGS:
+        raise QueueValidationError(
+            f"queue tags support at most {_MAX_QUEUE_TAGS} entries."
+        )
+
+    copied_tags: dict[str, str] = {}
+    for key, value in tags.items():
+        if not isinstance(key, str) or not key:
+            raise QueueValidationError("queue tag keys must be non-empty strings.")
+        if key.lower().startswith("aws:"):
+            raise QueueValidationError("queue tag keys must not start with 'aws:'.")
+        if len(key) > _MAX_TAG_KEY_LENGTH:
+            raise QueueValidationError(
+                f"queue tag keys must be {_MAX_TAG_KEY_LENGTH} characters or fewer."
+            )
+        if not isinstance(value, str):
+            raise QueueValidationError("queue tag values must be strings.")
+        if len(value) > _MAX_TAG_VALUE_LENGTH:
+            raise QueueValidationError(
+                f"queue tag values must be {_MAX_TAG_VALUE_LENGTH} characters or fewer."
+            )
+        copied_tags[key] = value
+    return copied_tags
 
 
 def string_metadata(value: Any) -> str | None:
