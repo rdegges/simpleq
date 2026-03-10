@@ -47,6 +47,8 @@ uv run pytest tests/integration
 ```
 
 The test suite now auto-selects `http://localhost:4566` on the host and `http://localstack:4566` inside the dev container.
+If LocalStack is not reachable, integration tests are skipped with a clear
+message instead of failing with connection errors.
 
 ## Live AWS smoke tests
 

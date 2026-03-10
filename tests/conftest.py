@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import socket
 from contextlib import suppress
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import pytest
@@ -31,13 +33,47 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    """Skip live AWS tests unless explicitly requested."""
-    if config.getoption("--run-live-aws"):
-        return
+    """Skip test groups requiring unavailable external dependencies."""
+    run_live_aws = config.getoption("--run-live-aws")
     skip_live = pytest.mark.skip(reason="Use --run-live-aws to run real AWS tests.")
     for item in items:
-        if "live" in item.keywords:
+        if "live" in item.keywords and not run_live_aws:
             item.add_marker(skip_live)
+
+    integration_endpoint = (
+        os.getenv("SIMPLEQ_ENDPOINT_URL")
+        or detect_localstack_endpoint()
+        or "http://localhost:4566"
+    )
+    if _is_endpoint_reachable(integration_endpoint):
+        return
+    skip_integration = pytest.mark.skip(
+        reason=(
+            "LocalStack endpoint "
+            f"{integration_endpoint} is unreachable. Start LocalStack or set "
+            "SIMPLEQ_ENDPOINT_URL to a reachable endpoint."
+        )
+    )
+    for item in items:
+        if "integration" in item.keywords:
+            item.add_marker(skip_integration)
+
+
+def _is_endpoint_reachable(endpoint: str) -> bool:
+    """Return whether an HTTP(S) endpoint accepts TCP connections."""
+    parsed = urlparse(endpoint)
+    host = parsed.hostname
+    if host is None:
+        return False
+    if parsed.port is not None:
+        port = parsed.port
+    elif parsed.scheme == "https":
+        port = 443
+    else:
+        port = 80
+    with suppress(OSError), socket.create_connection((host, port), timeout=0.2):
+        return True
+    return False
 
 
 @pytest.fixture(autouse=True)

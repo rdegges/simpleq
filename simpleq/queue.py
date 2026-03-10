@@ -669,10 +669,42 @@ class Queue:
             ],
         )
         return (
-            int(attributes.get("ApproximateNumberOfMessages", "0")),
-            int(attributes.get("ApproximateNumberOfMessagesNotVisible", "0")),
-            int(attributes.get("ApproximateNumberOfMessagesDelayed", "0")),
+            self._parse_queue_metric(
+                queue_name,
+                "ApproximateNumberOfMessages",
+                attributes.get("ApproximateNumberOfMessages"),
+            ),
+            self._parse_queue_metric(
+                queue_name,
+                "ApproximateNumberOfMessagesNotVisible",
+                attributes.get("ApproximateNumberOfMessagesNotVisible"),
+            ),
+            self._parse_queue_metric(
+                queue_name,
+                "ApproximateNumberOfMessagesDelayed",
+                attributes.get("ApproximateNumberOfMessagesDelayed"),
+            ),
         )
+
+    def _parse_queue_metric(
+        self,
+        queue_name: str,
+        attribute_name: str,
+        value: Any,
+    ) -> int:
+        """Parse an integer queue metric while tolerating malformed values."""
+        if value is None:
+            return 0
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            self.simpleq.logger.warning(
+                "queue_stats_metric_parse_failed",
+                queue_name=queue_name,
+                attribute_name=attribute_name,
+                value=str(value),
+            )
+            return 0
 
     async def _receive_raw_messages(
         self,
