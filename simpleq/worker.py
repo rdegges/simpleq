@@ -307,16 +307,17 @@ class Worker:
 
     def _retry_delay(self, queue: Any, attempt: int) -> int:
         strategy = self.simpleq.config.backoff_strategy
+        visibility_timeout = self._visibility_timeout(queue)
         if strategy == "constant":
-            return min(int(queue.visibility_timeout), 1)
+            return min(visibility_timeout, 1)
         if strategy == "linear":
-            return int(min(int(queue.visibility_timeout), attempt))
+            return int(min(visibility_timeout, attempt))
         if strategy == "exponential_jitter":
-            upper_bound = int(min(int(queue.visibility_timeout), 2 ** max(attempt - 1, 0)))
+            upper_bound = int(min(visibility_timeout, 2 ** max(attempt - 1, 0)))
             if upper_bound <= 0:
                 return 0
             return random.randint(0, upper_bound)
-        return int(min(int(queue.visibility_timeout), 2 ** max(attempt - 1, 0)))
+        return int(min(visibility_timeout, 2 ** max(attempt - 1, 0)))
 
 
 def reconstruct_arguments(

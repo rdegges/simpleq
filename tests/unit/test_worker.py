@@ -574,3 +574,27 @@ async def test_worker_heartbeat_uses_minimum_visibility_timeout_of_one_second(
 
     assert queue.visibility_changes
     assert queue.visibility_changes[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_retry_delay_uses_minimum_visibility_timeout_of_one_second() -> None:
+    simpleq = SimpleQ(backoff_strategy="exponential")
+    definition = TaskDefinition(
+        name=task_name_for(record_sync),
+        func=record_sync,
+        retry_exceptions=(RuntimeError,),
+    )
+    simpleq.registry.register(definition)
+    queue = FakeQueue(simpleq=simpleq, visibility_timeout=0)
+    worker = Worker(simpleq, [queue], concurrency=1)
+    job = Job(
+        task_name=definition.name,
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+        receive_count=1,
+    )
+
+    await worker._handle_failure(queue, job, RuntimeError("boom"))
+
+    assert queue.visibility_changes == [1]
