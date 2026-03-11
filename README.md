@@ -38,6 +38,9 @@ Boolean environment flags are strict. Use `1/0`, `true/false`, `yes/no`, or
 Numeric queue/runtime settings are validated eagerly against SQS limits:
 `batch_size`/`max_messages` `1-10`, `wait_seconds` `0-20`,
 `visibility_timeout` `0-43200`, and `concurrency >= 1`.
+Task retry options are also validated at registration time:
+`max_retries` must be `>= 0`, and every `retry_exceptions` entry must be an
+exception class.
 Retry backoff strategies support `constant`, `linear`, `exponential`, and
 `exponential_jitter` (randomized exponential delay to reduce retry stampedes).
 Queue creation also reconciles `MaximumMessageSize=1048576` so SimpleQ queues

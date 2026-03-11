@@ -13,7 +13,7 @@ from typing import (
 
 from simpleq._sync import run_sync
 from simpleq.config import BackoffStrategy, SimpleQConfig
-from simpleq.exceptions import QueueValidationError
+from simpleq.exceptions import InvalidTaskError, QueueValidationError
 from simpleq.observability import CostTracker, PrometheusMetrics, configure_logging
 from simpleq.queue import Queue
 from simpleq.sqs import SQSClient
@@ -27,6 +27,25 @@ if TYPE_CHECKING:
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+def _validate_retry_options(
+    *,
+    retry_exceptions: Sequence[type[BaseException]] | None,
+    max_retries: int | None,
+) -> None:
+    """Validate task-level retry options provided to ``SimpleQ.task``."""
+    if max_retries is not None and max_retries < 0:
+        raise InvalidTaskError("max_retries must be greater than or equal to 0.")
+    if retry_exceptions is None:
+        return
+    for retry_exception in retry_exceptions:
+        if not isinstance(retry_exception, type) or not issubclass(
+            retry_exception, BaseException
+        ):
+            raise InvalidTaskError(
+                "retry_exceptions entries must be exception classes."
+            )
 
 
 class SimpleQ:
@@ -206,6 +225,10 @@ class SimpleQ:
         max_retries: int | None = None,
     ) -> Callable[[Callable[P, R]], TaskHandle[P, R]]:
         """Register a function as a SimpleQ task."""
+        _validate_retry_options(
+            retry_exceptions=retry_exceptions,
+            max_retries=max_retries,
+        )
 
         def decorator(func: Callable[P, R]) -> TaskHandle[P, R]:
             definition = TaskDefinition(

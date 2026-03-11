@@ -84,6 +84,28 @@ def test_simpleq_task_decorator_registers_handle() -> None:
     assert simpleq.registry.get(task_name_for(record_async)).func is record_async
 
 
+def test_simpleq_task_rejects_invalid_retry_exception_entries() -> None:
+    simpleq = SimpleQ()
+
+    with pytest.raises(
+        InvalidTaskError,
+        match="retry_exceptions entries must be exception classes",
+    ):
+        simpleq.task(retry_exceptions=[RuntimeError, "boom"])(  # type: ignore[list-item]
+            record_async
+        )
+
+
+def test_simpleq_task_rejects_negative_task_max_retries() -> None:
+    simpleq = SimpleQ()
+
+    with pytest.raises(
+        InvalidTaskError,
+        match="max_retries must be greater than or equal to 0",
+    ):
+        simpleq.task(max_retries=-1)(record_async)
+
+
 def test_import_task_callable_and_registry_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
