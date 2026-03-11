@@ -515,3 +515,62 @@ async def test_worker_stop_cancels_in_flight_receive_tasks() -> None:
     await asyncio.sleep(0.02)
     await worker.stop()
     await asyncio.wait_for(work_task, timeout=0.2)
+
+
+@pytest.mark.asyncio
+async def test_worker_receive_uses_minimum_visibility_timeout_of_one_second() -> None:
+    simpleq = SimpleQ()
+
+    class ZeroVisibilityQueue(FakeQueue):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            self.visibility_timeout = 0
+            self.received_visibility_timeouts: list[int] = []
+
+        async def receive(
+            self, *, max_messages: int, visibility_timeout: int
+        ) -> list[Job]:
+            assert max_messages
+            self.received_visibility_timeouts.append(visibility_timeout)
+            return []
+
+    queue = ZeroVisibilityQueue(simpleq=simpleq)
+    worker = Worker(simpleq, [queue], concurrency=1)
+
+    received_queue, jobs = await worker._receive(queue)
+
+    assert received_queue is queue
+    assert jobs == []
+    assert queue.received_visibility_timeouts == [1]
+
+
+@pytest.mark.asyncio
+async def test_worker_heartbeat_uses_minimum_visibility_timeout_of_one_second(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    simpleq = SimpleQ()
+    queue = FakeQueue(simpleq=simpleq, visibility_timeout=0)
+    worker = Worker(simpleq, [queue], concurrency=1)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+        receipt_handle="receipt-1",
+    )
+    original_sleep = asyncio.sleep
+
+    async def fast_sleep(_seconds: float) -> None:
+        await original_sleep(0)
+
+    monkeypatch.setattr("simpleq.worker.asyncio.sleep", fast_sleep)
+
+    heartbeat_task = worker._heartbeat(queue, job)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    heartbeat_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await heartbeat_task
+
+    assert queue.visibility_changes
+    assert queue.visibility_changes[0] == 1

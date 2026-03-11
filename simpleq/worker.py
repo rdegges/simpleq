@@ -87,10 +87,11 @@ class Worker:
     async def _receive(self, queue: Any) -> tuple[Any, list[Job]]:
         try:
             timeout_seconds = self._receive_timeout(queue)
+            visibility_timeout = self._visibility_timeout(queue)
             jobs = await asyncio.wait_for(
                 queue.receive(
                     max_messages=min(queue.batch_size, self.concurrency),
-                    visibility_timeout=queue.visibility_timeout,
+                    visibility_timeout=visibility_timeout,
                 ),
                 timeout=timeout_seconds,
             )
@@ -215,11 +216,12 @@ class Worker:
 
     def _heartbeat(self, queue: Any, job: Job) -> asyncio.Task[None]:
         async def extend() -> None:
-            interval = max(1, queue.visibility_timeout // 2)
+            visibility_timeout = self._visibility_timeout(queue)
+            interval = max(1, visibility_timeout // 2)
             while True:
                 await asyncio.sleep(interval)
                 try:
-                    await queue.change_visibility(job, queue.visibility_timeout)
+                    await queue.change_visibility(job, visibility_timeout)
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -237,6 +239,9 @@ class Worker:
                     )
 
         return asyncio.create_task(extend())
+
+    def _visibility_timeout(self, queue: Any) -> int:
+        return max(1, int(getattr(queue, "visibility_timeout", 0)))
 
     async def _invoke(self, _queue: Any, job: Job) -> Any:
         definition = self.simpleq.registry.get(job.task_name)
