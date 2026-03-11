@@ -418,6 +418,13 @@ def test_uses_local_credentials() -> None:
     assert uses_local_credentials("http://localhost:4566") is True
     assert uses_local_credentials("http://localstack:4566") is True
     assert uses_local_credentials("http://host.docker.internal:4566") is True
+    assert uses_local_credentials("http://[::1]:4566") is True
+    assert (
+        uses_local_credentials(
+            "https://sqs.us-east-1.localhost.localstack.cloud:4566"
+        )
+        is True
+    )
     assert (
         uses_local_credentials("https://sqs.us-east-1.amazonaws.com/localstack-proxy")
         is False

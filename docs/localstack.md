@@ -33,4 +33,9 @@ SimpleQ detects LocalStack from:
 - `SIMPLEQ_ENV=test`
 - a reachable `http://localhost:4566`
 
+When an endpoint is configured, SimpleQ also treats loopback hosts (for example
+`127.0.0.1` and `::1`) plus LocalStack cloud aliases like
+`*.localhost.localstack.cloud` as local targets and automatically applies test
+credentials if explicit AWS credentials are not set.
+
 That keeps local setup small without making production configuration implicit.

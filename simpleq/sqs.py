@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import os
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -427,9 +428,11 @@ def uses_local_credentials(endpoint_url: str | None) -> bool:
     if hostname is None:
         return False
     normalized = hostname.strip().lower()
-    return normalized in {
-        "localhost",
-        "127.0.0.1",
-        "localstack",
-        "host.docker.internal",
-    }
+    if normalized in {"localhost", "localstack", "host.docker.internal"}:
+        return True
+    if normalized.endswith(".localhost.localstack.cloud"):
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
