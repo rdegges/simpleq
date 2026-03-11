@@ -186,6 +186,34 @@ def test_cast_backoff_strategy_and_log_level_strip_whitespace() -> None:
     assert cast_log_level(" warning ") == "WARNING"
 
 
+def test_from_overrides_normalizes_default_queue_name_whitespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_DEFAULT_QUEUE", "  events.fifo  ")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.default_queue_name == "events.fifo"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "   ",
+        "bad queue name",
+        "orders.fifo.extra",
+    ],
+)
+def test_from_overrides_rejects_invalid_default_queue_name(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_DEFAULT_QUEUE", value)
+
+    with pytest.raises(ValueError, match="default_queue_name"):
+        SimpleQConfig.from_overrides()
+
+
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [

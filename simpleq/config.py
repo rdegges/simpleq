@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Literal, cast
 from urllib.parse import urlparse
 
+from simpleq.exceptions import QueueValidationError
+from simpleq.queue import normalize_queue_name
+
 BackoffStrategy = Literal["constant", "linear", "exponential"]
 
 
@@ -273,6 +276,17 @@ def validate_config(config: SimpleQConfig) -> None:
         name="sqs_price_per_million",
         value=config.sqs_price_per_million,
     )
+    normalized_default_queue_name = config.default_queue_name.strip()
+    if not normalized_default_queue_name:
+        raise ValueError("default_queue_name must be non-empty.")
+    try:
+        normalize_queue_name(
+            normalized_default_queue_name,
+            fifo=normalized_default_queue_name.endswith(".fifo"),
+        )
+    except QueueValidationError as exc:
+        raise ValueError(f"Invalid default_queue_name: {exc}") from exc
+    config.default_queue_name = normalized_default_queue_name
 
 
 def resolve_bool(*, explicit: bool | None, env_name: str, default: bool) -> bool:
