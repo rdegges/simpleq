@@ -248,8 +248,10 @@ class Queue:
 
     async def purge(self) -> None:
         """Remove all visible messages from the queue."""
-        queue_url = await self.ensure_exists()
-        await self.simpleq.transport.purge_queue(self.name, queue_url)
+        await self._with_refreshed_queue_url(
+            "purge_queue",
+            lambda queue_url: self.simpleq.transport.purge_queue(self.name, queue_url),
+        )
 
     def purge_sync(self) -> None:
         """Synchronous wrapper for :meth:`purge`."""
@@ -469,10 +471,12 @@ class Queue:
 
     async def stats(self) -> QueueStats:
         """Return queue statistics."""
-        queue_url = await self.ensure_exists()
-        available, in_flight, delayed = await self._stats_for_queue(
-            self.name,
-            queue_url,
+        available, in_flight, delayed = await self._with_refreshed_queue_url(
+            "get_queue_attributes",
+            lambda queue_url: self._stats_for_queue(
+                self.name,
+                queue_url,
+            ),
         )
         self.simpleq.metrics.record_queue_depth(self.name, available)
         dlq_available: int | None = None
@@ -480,10 +484,14 @@ class Queue:
         dlq_delayed: int | None = None
         if self.dlq_name is not None:
             dlq_queue = self._dlq_queue()
-            dlq_url = await dlq_queue.ensure_exists()
-            dlq_available, dlq_in_flight, dlq_delayed = await self._stats_for_queue(
-                dlq_queue.name,
-                dlq_url,
+            dlq_available, dlq_in_flight, dlq_delayed = (
+                await dlq_queue._with_refreshed_queue_url(
+                    "get_queue_attributes",
+                    lambda dlq_url: dlq_queue._stats_for_queue(
+                        dlq_queue.name,
+                        dlq_url,
+                    ),
+                )
             )
             self.simpleq.metrics.record_queue_depth(dlq_queue.name, dlq_available)
         return QueueStats(

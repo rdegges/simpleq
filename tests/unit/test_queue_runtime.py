@@ -309,6 +309,68 @@ async def test_queue_enqueue_recovers_when_transport_cache_is_stale() -> None:
 
 
 @pytest.mark.asyncio
+async def test_queue_purge_recovers_from_stale_queue_url() -> None:
+    class FlakyPurgeTransport(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self._failed_once = False
+
+        async def purge_queue(self, queue_name: str, queue_url: str) -> None:
+            if not self._failed_once:
+                self._failed_once = True
+                raise QueueNotFoundError("Queue was deleted.")
+            await super().purge_queue(queue_name, queue_url)
+
+    simpleq = SimpleQ()
+    transport = FlakyPurgeTransport()
+    simpleq.transport = transport
+    queue = simpleq.queue("emails", wait_seconds=0)
+
+    await queue.purge()
+
+    assert transport.purged == ["emails"]
+    assert [name for name, _attributes, _tags in transport.ensured] == [
+        "emails",
+        "emails",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_queue_stats_recovers_from_stale_queue_url() -> None:
+    class FlakyStatsTransport(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self._failed_once = False
+
+        async def get_queue_attributes(
+            self, queue_name: str, queue_url: str, attribute_names: list[str]
+        ) -> dict[str, str]:
+            if not self._failed_once and "QueueArn" not in attribute_names:
+                self._failed_once = True
+                raise QueueNotFoundError("Queue was deleted.")
+            return await super().get_queue_attributes(
+                queue_name,
+                queue_url,
+                attribute_names,
+            )
+
+    simpleq = SimpleQ()
+    transport = FlakyStatsTransport()
+    simpleq.transport = transport
+    queue = simpleq.queue("emails", wait_seconds=0)
+
+    stats = await queue.stats()
+
+    assert stats.available_messages == 2
+    assert stats.in_flight_messages == 1
+    assert stats.delayed_messages == 0
+    assert [name for name, _attributes, _tags in transport.ensured] == [
+        "emails",
+        "emails",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_queue_receive_skips_and_deletes_malformed_messages(
     simpleq_with_fake_transport: SimpleQ,
 ) -> None:
