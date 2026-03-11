@@ -163,6 +163,27 @@ def test_queue_validates_fifo_routing_identifiers(
         )
 
 
+def test_queue_rejects_non_string_fifo_routing_identifiers() -> None:
+    queue = SimpleQ().queue("orders.fifo", fifo=True, dlq=True)
+
+    with pytest.raises(QueueValidationError, match="message_group_id must be a string"):
+        queue._validate_message_options(
+            delay_seconds=0,
+            message_group_id=123,  # type: ignore[arg-type]
+            deduplication_id="dedup",
+        )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="deduplication_id must be a string",
+    ):
+        queue._validate_message_options(
+            delay_seconds=0,
+            message_group_id="group",
+            deduplication_id=456,  # type: ignore[arg-type]
+        )
+
+
 def test_encode_message_attributes() -> None:
     assert encode_message_attributes({"source": "tests"}) == {
         "source": {"DataType": "String", "StringValue": "tests"}

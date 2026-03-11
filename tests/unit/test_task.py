@@ -8,7 +8,11 @@ from types import ModuleType
 import pytest
 
 from simpleq import SimpleQ
-from simpleq.exceptions import InvalidTaskError, TaskNotRegisteredError
+from simpleq.exceptions import (
+    InvalidTaskError,
+    QueueValidationError,
+    TaskNotRegisteredError,
+)
 from simpleq.task import (
     TaskDefinition,
     TaskHandle,
@@ -148,6 +152,25 @@ def test_task_handle_call_and_delay_sync() -> None:
     assert handle("hello") == "hello"
     job = handle.delay_sync("hello")
     assert job.args == ("hello",)
+
+
+@pytest.mark.asyncio
+async def test_task_delay_surfaces_invalid_fifo_resolver_types() -> None:
+    simpleq = SimpleQ()
+    queue = simpleq.queue("orders.fifo", fifo=True)
+    handle = TaskHandle(
+        simpleq,
+        TaskDefinition(
+            name="tests.fixtures.tasks:record_async",
+            func=record_async,
+            queue_ref=queue,
+            message_group_id=lambda value: value,
+            deduplication_id=lambda value: f"dedup-{value}",
+        ),
+    )
+
+    with pytest.raises(QueueValidationError, match="message_group_id must be a string"):
+        await handle.delay(123)
 
 
 def test_normalize_schema_input_additional_branches() -> None:

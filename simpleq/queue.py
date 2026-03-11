@@ -980,6 +980,8 @@ def validate_fifo_routing_identifier(
     """Validate an optional FIFO routing identifier."""
     if value is None:
         return
+    if not isinstance(value, str):
+        raise QueueValidationError(f"{name} must be a string when set.")
     if len(value) == 0:
         raise QueueValidationError(f"{name} must be a non-empty string when set.")
     if len(value) > _MAX_FIFO_ROUTING_ID_LENGTH:
