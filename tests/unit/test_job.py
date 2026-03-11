@@ -111,3 +111,39 @@ def test_job_from_message_body_rejects_non_mapping_metadata() -> None:
 
     with pytest.raises(TypeError):
         Job.from_message_body(json.dumps(payload))
+
+
+def test_job_from_sqs_message_tolerates_non_mapping_message_attributes() -> None:
+    message = {
+        "Body": Job(
+            task_name="tests.fixtures.tasks:record_sync",
+            args=("value",),
+            kwargs={},
+            queue_name="emails",
+        ).to_message_body(),
+        "MessageAttributes": None,
+    }
+
+    restored = Job.from_sqs_message("emails", message)
+
+    assert restored.message_attributes == {}
+
+
+def test_job_from_sqs_message_ignores_malformed_attribute_entries() -> None:
+    message = {
+        "Body": Job(
+            task_name="tests.fixtures.tasks:record_sync",
+            args=("value",),
+            kwargs={},
+            queue_name="emails",
+        ).to_message_body(),
+        "MessageAttributes": {
+            "valid": {"DataType": "String", "StringValue": "x"},
+            "non_mapping": "bad-shape",
+            "missing_value": {"DataType": "String"},
+        },
+    }
+
+    restored = Job.from_sqs_message("emails", message)
+
+    assert restored.message_attributes == {"valid": "x"}

@@ -97,10 +97,15 @@ class Job:
         """Build a job instance from an SQS message dictionary."""
         system_attributes = message.get("Attributes", {})
         attribute_payload = message.get("MessageAttributes", {})
-        string_attributes = {
-            key: str(value.get("StringValue", ""))
-            for key, value in attribute_payload.items()
-        }
+        string_attributes: dict[str, str] = {}
+        if isinstance(attribute_payload, dict):
+            for key, value in attribute_payload.items():
+                if not isinstance(key, str) or not isinstance(value, dict):
+                    continue
+                string_value = value.get("StringValue")
+                if string_value is None:
+                    continue
+                string_attributes[key] = str(string_value)
         job = cls.from_message_body(
             str(message["Body"]),
             receipt_handle=message.get("ReceiptHandle"),
