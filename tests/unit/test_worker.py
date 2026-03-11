@@ -58,6 +58,9 @@ def test_worker_rejects_invalid_runtime_options() -> None:
     simpleq = SimpleQ()
     queue = FakeQueue(simpleq=simpleq)
 
+    with pytest.raises(ValueError, match="at least one queue"):
+        Worker(simpleq, [], concurrency=1)
+
     with pytest.raises(ValueError, match="concurrency must be at least 1"):
         Worker(simpleq, [queue], concurrency=0)
 

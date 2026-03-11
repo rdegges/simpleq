@@ -28,6 +28,9 @@ class Worker:
         poll_interval: float = 1.0,
         receive_timeout_seconds: float | None = None,
     ) -> None:
+        resolved_queues = list(queues)
+        if not resolved_queues:
+            raise ValueError("at least one queue must be configured.")
         if concurrency < 1:
             raise ValueError("concurrency must be at least 1.")
         if poll_interval < 0:
@@ -35,7 +38,7 @@ class Worker:
         if receive_timeout_seconds is not None and receive_timeout_seconds <= 0:
             raise ValueError("receive_timeout_seconds must be greater than 0.")
         self.simpleq = simpleq
-        self.queues = list(queues)
+        self.queues = resolved_queues
         self.concurrency = concurrency
         self.poll_interval = poll_interval
         self.receive_timeout_seconds = receive_timeout_seconds
