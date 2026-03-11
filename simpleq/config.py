@@ -59,9 +59,7 @@ def _coalesce_int(explicit: int | None, env_name: str, default: int) -> int:
     try:
         return int(value)
     except ValueError as exc:
-        raise ValueError(
-            f"Invalid integer for {env_name}: {value!r}."
-        ) from exc
+        raise ValueError(f"Invalid integer for {env_name}: {value!r}.") from exc
 
 
 def _coalesce_float(explicit: float | None, env_name: str, default: float) -> float:
@@ -73,9 +71,7 @@ def _coalesce_float(explicit: float | None, env_name: str, default: float) -> fl
     try:
         return float(value)
     except ValueError as exc:
-        raise ValueError(
-            f"Invalid float for {env_name}: {value!r}."
-        ) from exc
+        raise ValueError(f"Invalid float for {env_name}: {value!r}.") from exc
 
 
 def _endpoint_reachable(url: str) -> bool:
@@ -99,12 +95,25 @@ def _normalize_endpoint_url(value: str | None) -> str | None:
     return normalized
 
 
+def _localstack_endpoint_from_hostname(hostname: str) -> str:
+    normalized = hostname.strip()
+    parsed = urlparse(normalized)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+
+    parsed_host = urlparse(f"//{normalized}")
+    if parsed_host.hostname is None:
+        return f"http://{normalized}:4566"
+    if parsed_host.port is not None:
+        return f"http://{parsed_host.netloc}"
+    return f"http://{parsed_host.netloc}:4566"
+
+
 def _validate_endpoint_url(value: str) -> None:
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError(
-            "endpoint_url must be a valid HTTP or HTTPS URL, "
-            f"got: {value!r}."
+            f"endpoint_url must be a valid HTTP or HTTPS URL, got: {value!r}."
         )
 
 
@@ -130,7 +139,7 @@ def detect_localstack_endpoint() -> str | None:
         return endpoint
 
     if hostname := os.getenv("LOCALSTACK_HOSTNAME"):
-        return f"http://{hostname}:4566"
+        return _localstack_endpoint_from_hostname(hostname)
 
     env_name = os.getenv("SIMPLEQ_ENV", "").strip().lower()
     inside_docker = Path("/.dockerenv").exists()

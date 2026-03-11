@@ -59,6 +59,27 @@ def test_detect_localstack_uses_localstack_hostname(
     assert detect_localstack_endpoint() == "http://localstack:4566"
 
 
+@pytest.mark.parametrize(
+    ("hostname", "expected"),
+    [
+        ("localstack:4577", "http://localstack:4577"),
+        ("https://localstack.internal:8443", "https://localstack.internal:8443"),
+        (
+            " http://localhost.localstack.cloud:4566 ",
+            "http://localhost.localstack.cloud:4566",
+        ),
+    ],
+)
+def test_detect_localstack_normalizes_localstack_hostname_values(
+    monkeypatch: pytest.MonkeyPatch,
+    hostname: str,
+    expected: str,
+) -> None:
+    monkeypatch.setenv("LOCALSTACK_HOSTNAME", hostname)
+
+    assert detect_localstack_endpoint() == expected
+
+
 def test_detect_localstack_uses_ci(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CI", "true")
     assert detect_localstack_endpoint() == "http://localhost:4566"
