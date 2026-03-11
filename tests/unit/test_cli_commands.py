@@ -121,14 +121,17 @@ class FakeClient:
             (),
             {"names": lambda self: ["tests.fixtures.tasks:record_sync"]},
         )()
+        self.worker_calls: list[dict[str, object]] = []
 
     def queue(self, name: str, **kwargs: object) -> FakeQueue:
         self.queue_instance.name = name
         return self.queue_instance
 
-    def worker(self, *, queues: list[str], concurrency: int) -> FakeWorker:
+    def worker(
+        self, *, queues: list[str], concurrency: int | None = None
+    ) -> FakeWorker:
         assert queues
-        assert concurrency == 7
+        self.worker_calls.append({"queues": list(queues), "concurrency": concurrency})
         return self.worker_instance
 
     def run_sync(self, awaitable: object) -> object:
@@ -178,6 +181,14 @@ def test_worker_start_and_queue_commands(
         queues=["emails"], imports=["tests.fixtures.tasks"], concurrency=7, burst=True
     )
     assert client.worker_instance.calls == [True]
+    assert client.worker_calls[0]["concurrency"] == 7
+
+    worker_start(
+        queues=["emails"],
+        imports=["tests.fixtures.tasks"],
+        burst=True,
+    )
+    assert client.worker_calls[1]["concurrency"] is None
 
     reload_calls: dict[str, object] = {}
     monkeypatch.setattr(

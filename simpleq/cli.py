@@ -84,7 +84,9 @@ def load_registered_tasks(
                     )
 
 
-def rebind_task_definition(simpleq: SimpleQ, definition: TaskDefinition) -> TaskDefinition:
+def rebind_task_definition(
+    simpleq: SimpleQ, definition: TaskDefinition
+) -> TaskDefinition:
     """Rebind an imported task definition onto the target SimpleQ client."""
     queue_ref = definition.queue_ref
     if queue_ref is None:
@@ -202,7 +204,7 @@ def run_reloading_worker(
     *,
     queues: list[str],
     imports: list[str],
-    concurrency: int,
+    concurrency: int | None,
     burst: bool,
     endpoint_url: str | None,
     region: str | None,
@@ -318,7 +320,7 @@ def init_project(
 def worker_start(
     queues: Annotated[list[str] | None, typer.Option("--queue", "-q")] = None,
     imports: Annotated[list[str] | None, typer.Option("--import-module")] = None,
-    concurrency: Annotated[int, typer.Option("--concurrency")] = 10,
+    concurrency: Annotated[int | None, typer.Option("--concurrency")] = None,
     burst: Annotated[bool, typer.Option("--burst")] = False,
     reload: Annotated[bool, typer.Option("--reload")] = False,
     endpoint_url: Annotated[str | None, typer.Option("--endpoint-url")] = None,
