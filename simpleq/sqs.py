@@ -79,7 +79,7 @@ class SQSClient:
         try:
             response = await self._call(
                 queue_name,
-                "get_queue_attributes",
+                "get_queue_url",
                 "get_queue_url",
                 QueueName=queue_name,
             )

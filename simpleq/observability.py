@@ -15,6 +15,7 @@ OperationName = Literal[
     "create_queue",
     "delete_message",
     "delete_queue",
+    "get_queue_url",
     "get_queue_attributes",
     "list_queue_tags",
     "list_queues",

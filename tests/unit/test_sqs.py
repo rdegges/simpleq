@@ -9,8 +9,21 @@ from botocore.exceptions import ClientError
 
 from simpleq.config import SimpleQConfig
 from simpleq.exceptions import QueueBatchError, QueueNotFoundError
-from simpleq.observability import CostTracker
+from simpleq.observability import CostTracker, OperationName
 from simpleq.sqs import SQSClient, uses_local_credentials
+
+
+class SpyCostTracker(CostTracker):
+    """Capture transport operations for assertions."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls: list[tuple[str, str, int]] = []
+
+    def track_request(
+        self, queue_name: str, operation: OperationName, *, count: int = 1
+    ) -> None:
+        self.calls.append((queue_name, operation, count))
 
 
 class FakeBotoSQSClient:
@@ -173,6 +186,20 @@ async def test_get_queue_url_cache_and_errors(transport: SQSClient) -> None:
     assert await transport.get_queue_url("missing") is None
     with pytest.raises(ClientError):
         await transport.get_queue_url("broken")
+
+
+@pytest.mark.asyncio
+async def test_get_queue_url_tracks_get_queue_url_operation() -> None:
+    fake = FakeBotoSQSClient()
+    tracker = SpyCostTracker()
+    transport = SQSClient(
+        SimpleQConfig.from_overrides(endpoint_url="http://localhost:4566"),
+        tracker,
+    )
+    transport._client = fake
+
+    assert await transport.get_queue_url("emails") == "https://example.com/emails"
+    assert tracker.calls == [("emails", "get_queue_url", 1)]
 
 
 @pytest.mark.asyncio
