@@ -347,6 +347,79 @@ async def test_live_fifo_dlq_redrive_smoke() -> None:
 
 @pytest.mark.live
 @pytest.mark.asyncio
+async def test_live_fifo_content_based_dlq_redrive_smoke() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=1)
+    queue = simpleq.queue(
+        f"simpleq-live-fifo-content-dlq-{uuid4().hex[:8]}.fifo",
+        fifo=True,
+        dlq=True,
+        content_based_deduplication=True,
+        wait_seconds=0,
+        visibility_timeout=1,
+    )
+    failing = simpleq.task(
+        queue=queue,
+        message_group_id=lambda value: "customer-1",
+        max_retries=1,
+    )(tasks.always_fail)
+
+    try:
+        await failing.delay("order-1")
+        worker = simpleq.worker(queues=[queue], concurrency=1, poll_interval=0.1)
+        await worker.work(burst=True)
+
+        for _ in range(25):
+            stats = await queue.stats()
+            if stats.dlq_available_messages and stats.dlq_available_messages >= 1:
+                break
+            await asyncio.sleep(0.2)
+        else:
+            raise AssertionError(
+                "FIFO content-based DLQ message did not become visible."
+            )
+
+        dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=5)]
+        assert len(dlq_jobs) == 1
+        assert dlq_jobs[0].args == ("order-1",)
+
+        redriven = await queue.redrive_dlq_jobs(limit=1)
+        assert redriven == 1
+
+        for _ in range(25):
+            received = await queue.receive(max_messages=1, wait_seconds=0)
+            if received:
+                assert received[0].args == ("order-1",)
+                assert received[0].metadata["deduplication_id"] not in {
+                    dlq_jobs[0].metadata["deduplication_id"],
+                    dlq_jobs[0].metadata["_simpleq_deduplication_id"],
+                }
+                assert received[0].metadata["_simpleq_deduplication_id"] not in {
+                    dlq_jobs[0].metadata["deduplication_id"],
+                    dlq_jobs[0].metadata["_simpleq_deduplication_id"],
+                }
+                await queue.ack(received[0])
+                break
+            await asyncio.sleep(0.2)
+        else:
+            raise AssertionError(
+                "Redriven FIFO content-based message did not become visible."
+            )
+    finally:
+        await queue.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
 async def test_live_fifo_receive_blocks_later_messages_in_same_group() -> None:
     _load_dotenv(Path(".env"))
     required = [

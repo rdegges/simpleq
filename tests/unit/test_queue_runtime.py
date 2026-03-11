@@ -432,7 +432,9 @@ async def test_queue_receive_skips_and_deletes_malformed_messages(
     assert [job.message_id for job in received] == ["mid-good"]
     assert simpleq_with_fake_transport.transport.deleted_messages == ["receipt-bad"]
     assert (
-        simpleq_with_fake_transport.cost_tracker.metrics_for("emails").jobs_decode_failed
+        simpleq_with_fake_transport.cost_tracker.metrics_for(
+            "emails"
+        ).jobs_decode_failed
         == 1
     )
 
@@ -670,6 +672,62 @@ async def test_fifo_dlq_and_redrive_preserve_group_and_rotate_deduplication_id(
         redrive_payload.metadata["deduplication_id"] == redrive_send["deduplication_id"]
     )
     assert "receipt-dlq" in simpleq_with_fake_transport.transport.deleted_messages
+
+
+@pytest.mark.asyncio
+async def test_fifo_content_based_dlq_and_redrive_rotate_deduplication_id(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue(
+        "orders-content.fifo",
+        fifo=True,
+        dlq=True,
+        content_based_deduplication=True,
+        wait_seconds=0,
+    )
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("order-1",),
+        kwargs={},
+        queue_name=queue.name,
+        metadata={
+            "message_group_id": "customer-1",
+            "_simpleq_message_group_id": "customer-1",
+            "deduplication_id": "sqs-original-dedup-id",
+            "_simpleq_deduplication_id": "sqs-original-dedup-id",
+        },
+    )
+
+    await queue.move_to_dlq(job, error="boom")
+    dlq_send = simpleq_with_fake_transport.transport.sent[-1]
+    assert dlq_send["queue_name"] == "orders-content-dlq.fifo"
+    assert dlq_send["message_group_id"] == "customer-1"
+    assert dlq_send["deduplication_id"] not in {None, "sqs-original-dedup-id"}
+
+    simpleq_with_fake_transport.transport.receive_queue = [
+        [
+            {
+                "Body": dlq_send["message_body"],
+                "ReceiptHandle": "receipt-content-dlq",
+                "MessageId": "mid-content-dlq",
+                "Attributes": {"ApproximateReceiveCount": "1"},
+                "MessageAttributes": {},
+            }
+        ],
+        [],
+    ]
+
+    assert await queue.redrive_dlq_jobs(limit=1) == 1
+    redrive_send = simpleq_with_fake_transport.transport.sent[-1]
+    assert redrive_send["queue_name"] == queue.name
+    assert redrive_send["message_group_id"] == "customer-1"
+    assert redrive_send["deduplication_id"] not in {
+        "sqs-original-dedup-id",
+        dlq_send["deduplication_id"],
+    }
+    assert (
+        "receipt-content-dlq" in simpleq_with_fake_transport.transport.deleted_messages
+    )
 
 
 def test_queue_string_metadata_and_validation(

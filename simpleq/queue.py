@@ -484,14 +484,16 @@ class Queue:
         dlq_delayed: int | None = None
         if self.dlq_name is not None:
             dlq_queue = self._dlq_queue()
-            dlq_available, dlq_in_flight, dlq_delayed = (
-                await dlq_queue._with_refreshed_queue_url(
-                    "get_queue_attributes",
-                    lambda dlq_url: dlq_queue._stats_for_queue(
-                        dlq_queue.name,
-                        dlq_url,
-                    ),
-                )
+            (
+                dlq_available,
+                dlq_in_flight,
+                dlq_delayed,
+            ) = await dlq_queue._with_refreshed_queue_url(
+                "get_queue_attributes",
+                lambda dlq_url: dlq_queue._stats_for_queue(
+                    dlq_queue.name,
+                    dlq_url,
+                ),
             )
             self.simpleq.metrics.record_queue_depth(dlq_queue.name, dlq_available)
         return QueueStats(
@@ -1020,8 +1022,6 @@ def next_deduplication_id(queue: Queue, job: Job, *, reason: str) -> str | None:
     """Return a fresh FIFO deduplication ID for internal requeue operations."""
     if not queue.fifo:
         return None
-    if queue.content_based_deduplication:
-        return routing_deduplication_id(job)
     return f"simpleq-{reason}-{job.job_id}-{uuid4().hex}"
 
 

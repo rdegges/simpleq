@@ -549,7 +549,9 @@ async def test_dlq_and_redrive(simpleq_localstack, unique_name, cleanup_queues) 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_fifo_dlq_and_redrive(simpleq_localstack, unique_name, cleanup_queues) -> None:
+async def test_fifo_dlq_and_redrive(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
     queue = simpleq_localstack.queue(
         unique_name("fifo-dlq") + ".fifo",
         fifo=True,
@@ -583,6 +585,54 @@ async def test_fifo_dlq_and_redrive(simpleq_localstack, unique_name, cleanup_que
     received = await queue.receive(max_messages=1, wait_seconds=0)
     assert len(received) == 1
     assert received[0].args == ("order-1",)
+    await queue.ack(received[0])
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_fifo_content_based_dlq_and_redrive(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
+    queue = simpleq_localstack.queue(
+        unique_name("fifo-content-dlq") + ".fifo",
+        fifo=True,
+        dlq=True,
+        content_based_deduplication=True,
+        visibility_timeout=1,
+        wait_seconds=0,
+    )
+    cleanup_queues.append(queue)
+    failing = simpleq_localstack.task(
+        queue=queue,
+        message_group_id=lambda value: "customer-1",
+        max_retries=1,
+    )(tasks.always_fail)
+
+    await failing.delay("order-1")
+
+    worker = simpleq_localstack.worker(queues=[queue], concurrency=1, poll_interval=0.1)
+    await worker.work(burst=True)
+    await eventually(lambda: _dlq_has_messages(queue), timeout=5.0, interval=0.2)
+
+    dlq_jobs = [job async for job in queue.get_dlq_jobs(limit=5)]
+    assert len(dlq_jobs) == 1
+    assert dlq_jobs[0].args == ("order-1",)
+
+    redriven = await queue.redrive_dlq_jobs(limit=1)
+    assert redriven == 1
+
+    await eventually(lambda: _message_visible(queue), timeout=5.0, interval=0.2)
+    received = await queue.receive(max_messages=1, wait_seconds=0)
+    assert len(received) == 1
+    assert received[0].args == ("order-1",)
+    assert received[0].metadata["deduplication_id"] not in {
+        dlq_jobs[0].metadata["deduplication_id"],
+        dlq_jobs[0].metadata["_simpleq_deduplication_id"],
+    }
+    assert received[0].metadata["_simpleq_deduplication_id"] not in {
+        dlq_jobs[0].metadata["deduplication_id"],
+        dlq_jobs[0].metadata["_simpleq_deduplication_id"],
+    }
     await queue.ack(received[0])
 
 
