@@ -286,6 +286,11 @@ class Worker:
                 return
             delay = self._retry_delay(queue, job.receive_count)
             await queue.change_visibility(job, delay)
+            self.simpleq.metrics.record_retry_delay(
+                queue.name,
+                strategy=self.simpleq.config.backoff_strategy,
+                delay_seconds=delay,
+            )
             self.simpleq.metrics.record_processed(
                 queue.name,
                 status="retry",

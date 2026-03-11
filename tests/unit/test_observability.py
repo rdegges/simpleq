@@ -29,9 +29,11 @@ def test_prometheus_metrics_render() -> None:
     metrics = PrometheusMetrics()
     metrics.record_enqueue("emails")
     metrics.record_processed("emails", status="success", duration_seconds=0.5)
+    metrics.record_retry_delay("emails", strategy="exponential", delay_seconds=4)
     metrics.record_queue_depth("emails", 3)
     payload = metrics.render().decode("utf-8")
     assert "simpleq_jobs_enqueued_total" in payload
+    assert "simpleq_retry_delay_seconds" in payload
     assert "simpleq_queue_depth" in payload
 
 

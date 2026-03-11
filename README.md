@@ -47,6 +47,8 @@ Retry backoff strategies support `constant`, `linear`, `exponential`, and
 exponential cap to reduce retry stampedes). For jitter workloads, you can raise
 the minimum delay with `SIMPLEQ_RETRY_JITTER_MIN_SECONDS` (or
 `retry_jitter_min_seconds=...`) to smooth retries during large incidents.
+Retry delays are exported as a Prometheus histogram at
+`simpleq_retry_delay_seconds{queue,strategy}` for backoff tuning and incident analysis.
 Queue creation also reconciles `MaximumMessageSize=1048576` so SimpleQ queues
 can use the current SQS `1 MiB` payload limit, and enqueue operations fail fast
 locally if a single message or batch exceeds that budget.

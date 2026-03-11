@@ -8,7 +8,13 @@ from time import perf_counter
 from typing import Literal, cast
 
 import structlog
-from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 OperationName = Literal[
     "change_visibility",
@@ -163,6 +169,12 @@ class PrometheusMetrics:
             ["queue"],
             registry=self.registry,
         )
+        self.retry_delay_seconds = Histogram(
+            "simpleq_retry_delay_seconds",
+            "Retry delay in seconds applied to failed jobs.",
+            ["queue", "strategy"],
+            registry=self.registry,
+        )
         self.queue_depth = Gauge(
             "simpleq_queue_depth",
             "Approximate visible messages in the queue.",
@@ -184,6 +196,14 @@ class PrometheusMetrics:
     def record_queue_depth(self, queue_name: str, depth: int) -> None:
         """Update the queue depth gauge."""
         self.queue_depth.labels(queue=queue_name).set(depth)
+
+    def record_retry_delay(
+        self, queue_name: str, *, strategy: str, delay_seconds: int
+    ) -> None:
+        """Record the retry delay selected for a failed job."""
+        self.retry_delay_seconds.labels(
+            queue=queue_name, strategy=strategy
+        ).observe(delay_seconds)
 
     def render(self) -> bytes:
         """Render all metrics in Prometheus exposition format."""

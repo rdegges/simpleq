@@ -126,6 +126,16 @@ async def test_worker_handles_retry_and_dlq() -> None:
     )
     await worker._handle_failure(queue, job, RuntimeError("boom"))
     assert queue.visibility_changes == [1]
+    retry_delay_samples = simpleq.metrics.retry_delay_seconds.collect()[0].samples
+    retry_count_samples = [
+        sample
+        for sample in retry_delay_samples
+        if sample.name == "simpleq_retry_delay_seconds_count"
+        and sample.labels.get("queue") == queue.name
+        and sample.labels.get("strategy") == "exponential"
+    ]
+    assert len(retry_count_samples) == 1
+    assert retry_count_samples[0].value == 1
 
     exhausted = Job(
         task_name=definition.name,
