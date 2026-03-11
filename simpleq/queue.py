@@ -721,7 +721,7 @@ class Queue:
         if value is None:
             return 0
         try:
-            return int(value)
+            parsed = int(value)
         except (TypeError, ValueError):
             self.simpleq.logger.warning(
                 "queue_stats_metric_parse_failed",
@@ -730,6 +730,15 @@ class Queue:
                 value=str(value),
             )
             return 0
+        if parsed < 0:
+            self.simpleq.logger.warning(
+                "queue_stats_metric_negative_value",
+                queue_name=queue_name,
+                attribute_name=attribute_name,
+                value=parsed,
+            )
+            return 0
+        return parsed
 
     async def _receive_raw_messages(
         self,

@@ -143,6 +143,34 @@ async def test_queue_stats_tolerates_malformed_attribute_values(
     assert stats.dlq_delayed_messages == 0
 
 
+@pytest.mark.asyncio
+async def test_queue_stats_clamps_negative_attribute_values_to_zero(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", dlq=True, wait_seconds=0)
+    simpleq_with_fake_transport.transport.queue_attributes = {
+        queue.name: {
+            "ApproximateNumberOfMessages": "-1",
+            "ApproximateNumberOfMessagesNotVisible": "-2",
+            "ApproximateNumberOfMessagesDelayed": "-3",
+        }
+    }
+    simpleq_with_fake_transport.transport.queue_attributes[queue.dlq_name] = {
+        "ApproximateNumberOfMessages": "-4",
+        "ApproximateNumberOfMessagesNotVisible": "5",
+        "ApproximateNumberOfMessagesDelayed": "-6",
+    }
+
+    stats = await queue.stats()
+
+    assert stats.available_messages == 0
+    assert stats.in_flight_messages == 0
+    assert stats.delayed_messages == 0
+    assert stats.dlq_available_messages == 0
+    assert stats.dlq_in_flight_messages == 5
+    assert stats.dlq_delayed_messages == 0
+
+
 @pytest.fixture
 def simpleq_with_fake_transport() -> SimpleQ:
     simpleq = SimpleQ()
