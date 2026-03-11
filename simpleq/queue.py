@@ -993,7 +993,8 @@ def is_missing_queue_error(exc: Exception) -> bool:
     if isinstance(exc, QueueNotFoundError):
         return True
     if isinstance(exc, KeyError):
-        return True
+        text = str(exc)
+        return text.startswith("\"Queue '") and text.endswith(" is not defined.\"")
     response = getattr(exc, "response", None)
     if not isinstance(response, dict):
         return False

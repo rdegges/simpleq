@@ -7,7 +7,12 @@ import pytest
 from simpleq import SimpleQ
 from simpleq.exceptions import QueueValidationError
 from simpleq.job import Job
-from simpleq.queue import BatchEntry, encode_message_attributes, normalize_queue_name
+from simpleq.queue import (
+    BatchEntry,
+    encode_message_attributes,
+    is_missing_queue_error,
+    normalize_queue_name,
+)
 
 
 def test_normalize_queue_name_validates_fifo_suffix() -> None:
@@ -282,3 +287,11 @@ async def test_enqueue_rejects_fifo_routing_on_standard_queue() -> None:
         QueueValidationError, match="Standard queues do not support deduplication_id"
     ):
         await queue.enqueue(job, deduplication_id="dedup-1")
+
+
+def test_is_missing_queue_error_accepts_transport_keyerror_shape() -> None:
+    assert is_missing_queue_error(KeyError("Queue 'emails' is not defined."))
+
+
+def test_is_missing_queue_error_rejects_generic_keyerrors() -> None:
+    assert not is_missing_queue_error(KeyError("missing required field"))
