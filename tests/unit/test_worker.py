@@ -89,9 +89,7 @@ def test_worker_rejects_non_strict_numeric_runtime_types() -> None:
     with pytest.raises(ValueError, match="poll_interval must be a number"):
         Worker(simpleq, [queue], concurrency=1, poll_interval=True)  # type: ignore[arg-type]
 
-    with pytest.raises(
-        ValueError, match="receive_timeout_seconds must be a number"
-    ):
+    with pytest.raises(ValueError, match="receive_timeout_seconds must be a number"):
         Worker(
             simpleq,
             [queue],
@@ -99,9 +97,7 @@ def test_worker_rejects_non_strict_numeric_runtime_types() -> None:
             receive_timeout_seconds="2",  # type: ignore[arg-type]
         )
 
-    with pytest.raises(
-        ValueError, match="receive_timeout_seconds must be a number"
-    ):
+    with pytest.raises(ValueError, match="receive_timeout_seconds must be a number"):
         Worker(
             simpleq,
             [queue],
@@ -231,7 +227,28 @@ def test_retry_delay_exponential_jitter_strategy(
     monkeypatch.setattr("simpleq.worker.random.randint", fake_randint)
 
     assert jittered._retry_delay(queue, 3) == 4
-    assert calls == [(0, 4)]
+    assert calls == [(1, 4)]
+
+
+def test_retry_delay_exponential_jitter_uses_minimum_delay_of_one_second(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    queue = FakeQueue(simpleq=SimpleQ(), visibility_timeout=1)
+    jittered = Worker(
+        SimpleQ(backoff_strategy="exponential_jitter"),
+        [queue],
+        concurrency=1,
+    )
+    calls: list[tuple[int, int]] = []
+
+    def fake_randint(start: int, end: int) -> int:
+        calls.append((start, end))
+        return start
+
+    monkeypatch.setattr("simpleq.worker.random.randint", fake_randint)
+
+    assert jittered._retry_delay(queue, 1) == 1
+    assert calls == [(1, 1)]
 
 
 @pytest.mark.asyncio
@@ -614,7 +631,9 @@ async def test_worker_heartbeat_uses_minimum_visibility_timeout_of_one_second(
 
 
 @pytest.mark.asyncio
-async def test_worker_retry_delay_uses_minimum_visibility_timeout_of_one_second() -> None:
+async def test_worker_retry_delay_uses_minimum_visibility_timeout_of_one_second() -> (
+    None
+):
     simpleq = SimpleQ(backoff_strategy="exponential")
     definition = TaskDefinition(
         name=task_name_for(record_sync),

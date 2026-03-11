@@ -263,7 +263,9 @@ class Worker:
         self.simpleq.cost_tracker.job_failed(queue.name)
         definition = self._resolve_task_definition(job.task_name)
         if definition is None:
-            await queue.move_to_dlq(job, error=f"task-definition-resolution-failed: {exc}")
+            await queue.move_to_dlq(
+                job, error=f"task-definition-resolution-failed: {exc}"
+            )
             self.simpleq.metrics.record_processed(
                 queue.name,
                 status="dlq" if queue_has_dlq(queue) else "failure",
@@ -322,10 +324,8 @@ class Worker:
         if strategy == "linear":
             return int(min(visibility_timeout, attempt))
         if strategy == "exponential_jitter":
-            upper_bound = int(min(visibility_timeout, 2 ** max(attempt - 1, 0)))
-            if upper_bound <= 0:
-                return 0
-            return random.randint(0, upper_bound)
+            upper_bound = max(1, int(min(visibility_timeout, 2 ** max(attempt - 1, 0))))
+            return random.randint(1, upper_bound)
         return int(min(visibility_timeout, 2 ** max(attempt - 1, 0)))
 
 

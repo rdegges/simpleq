@@ -42,7 +42,8 @@ Task retry options are also validated at registration time:
 `max_retries` must be `>= 0`, and every `retry_exceptions` entry must be an
 exception class.
 Retry backoff strategies support `constant`, `linear`, `exponential`, and
-`exponential_jitter` (randomized exponential delay to reduce retry stampedes).
+`exponential_jitter` (randomized exponential delay between 1 second and the
+exponential cap to reduce retry stampedes).
 Queue creation also reconciles `MaximumMessageSize=1048576` so SimpleQ queues
 can use the current SQS `1 MiB` payload limit, and enqueue operations fail fast
 locally if a single message or batch exceeds that budget.
