@@ -203,6 +203,7 @@ def test_from_overrides_normalizes_case_for_string_enums(
 
 def test_cast_backoff_strategy_and_log_level_strip_whitespace() -> None:
     assert cast_backoff_strategy("  exponential  ") == "exponential"
+    assert cast_backoff_strategy(" Exponential_Jitter ") == "exponential_jitter"
     assert cast_log_level(" warning ") == "WARNING"
 
 

@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from simpleq.exceptions import QueueValidationError
 from simpleq.queue import normalize_queue_name
 
-BackoffStrategy = Literal["constant", "linear", "exponential"]
+BackoffStrategy = Literal["constant", "linear", "exponential", "exponential_jitter"]
 
 
 def _validate_int_range(
@@ -322,7 +322,12 @@ def resolve_bool(*, explicit: bool | None, env_name: str, default: bool) -> bool
 def cast_backoff_strategy(value: str) -> BackoffStrategy:
     """Validate a backoff strategy string."""
     normalized = value.strip().lower()
-    if normalized not in {"constant", "linear", "exponential"}:
+    if normalized not in {
+        "constant",
+        "linear",
+        "exponential",
+        "exponential_jitter",
+    }:
         raise ValueError(f"Unsupported backoff strategy: {value}")
     return cast("BackoffStrategy", normalized)
 

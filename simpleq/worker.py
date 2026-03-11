@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from typing import TYPE_CHECKING, Any
 
 from simpleq._sync import run_sync
@@ -305,6 +306,11 @@ class Worker:
             return min(int(queue.visibility_timeout), 1)
         if strategy == "linear":
             return int(min(int(queue.visibility_timeout), attempt))
+        if strategy == "exponential_jitter":
+            upper_bound = int(min(int(queue.visibility_timeout), 2 ** max(attempt - 1, 0)))
+            if upper_bound <= 0:
+                return 0
+            return random.randint(0, upper_bound)
         return int(min(int(queue.visibility_timeout), 2 ** max(attempt - 1, 0)))
 
 

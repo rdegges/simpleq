@@ -176,6 +176,27 @@ def test_retry_delay_strategies() -> None:
     assert constant._retry_delay(queue, 3) == 1
 
 
+def test_retry_delay_exponential_jitter_strategy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    queue = FakeQueue(simpleq=SimpleQ(), visibility_timeout=8)
+    jittered = Worker(
+        SimpleQ(backoff_strategy="exponential_jitter"),
+        [queue],
+        concurrency=1,
+    )
+    calls: list[tuple[int, int]] = []
+
+    def fake_randint(start: int, end: int) -> int:
+        calls.append((start, end))
+        return end
+
+    monkeypatch.setattr("simpleq.worker.random.randint", fake_randint)
+
+    assert jittered._retry_delay(queue, 3) == 4
+    assert calls == [(0, 4)]
+
+
 @pytest.mark.asyncio
 async def test_worker_stop_sleep_sync_and_sync_invoke() -> None:
     simpleq = SimpleQ()
