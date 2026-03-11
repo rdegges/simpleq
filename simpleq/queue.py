@@ -451,6 +451,8 @@ class Queue:
         """Change the visibility timeout of a received message."""
         if job.receipt_handle is None:
             return
+        if not is_strict_int(timeout_seconds):
+            raise QueueValidationError("visibility_timeout must be an integer.")
         if timeout_seconds < 0 or timeout_seconds > _MAX_VISIBILITY_TIMEOUT:
             raise QueueValidationError(
                 f"visibility_timeout must be between 0 and {_MAX_VISIBILITY_TIMEOUT}."
@@ -781,6 +783,8 @@ class Queue:
         message_group_id: str | None,
         deduplication_id: str | None,
     ) -> None:
+        if not is_strict_int(delay_seconds):
+            raise QueueValidationError("delay_seconds must be an integer.")
         if delay_seconds < 0 or delay_seconds > 900:
             raise QueueValidationError("delay_seconds must be between 0 and 900.")
         if self.fifo:
@@ -819,20 +823,25 @@ class Queue:
         wait_seconds: int,
         visibility_timeout: int | None,
     ) -> None:
+        if not is_strict_int(max_messages):
+            raise QueueValidationError("max_messages must be an integer.")
         if max_messages < 1 or max_messages > _MAX_RECEIVE_MESSAGES:
             raise QueueValidationError(
                 f"max_messages must be between 1 and {_MAX_RECEIVE_MESSAGES}."
             )
+        if not is_strict_int(wait_seconds):
+            raise QueueValidationError("wait_seconds must be an integer.")
         if wait_seconds < 0 or wait_seconds > _MAX_WAIT_SECONDS:
             raise QueueValidationError(
                 f"wait_seconds must be between 0 and {_MAX_WAIT_SECONDS}."
             )
-        if visibility_timeout is not None and (
-            visibility_timeout < 0 or visibility_timeout > _MAX_VISIBILITY_TIMEOUT
-        ):
-            raise QueueValidationError(
-                f"visibility_timeout must be between 0 and {_MAX_VISIBILITY_TIMEOUT}."
-            )
+        if visibility_timeout is not None:
+            if not is_strict_int(visibility_timeout):
+                raise QueueValidationError("visibility_timeout must be an integer.")
+            if visibility_timeout < 0 or visibility_timeout > _MAX_VISIBILITY_TIMEOUT:
+                raise QueueValidationError(
+                    f"visibility_timeout must be between 0 and {_MAX_VISIBILITY_TIMEOUT}."
+                )
 
 
 def normalize_queue_name(name: str, *, fifo: bool) -> str:
@@ -892,6 +901,8 @@ def validate_positive_limit(name: str, value: int | None) -> None:
     """Validate optional ``limit`` style arguments."""
     if value is None:
         return
+    if not is_strict_int(value):
+        raise QueueValidationError(f"{name} must be an integer.")
     if value < 1:
         raise QueueValidationError(f"{name} must be at least 1.")
 
@@ -1013,13 +1024,18 @@ def validate_fifo_routing_identifier(
         )
 
 
+def is_strict_int(value: Any) -> bool:
+    """Return whether ``value`` is an integer but not a boolean."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def is_missing_queue_error(exc: Exception) -> bool:
     """Return whether an exception represents a missing queue."""
     if isinstance(exc, QueueNotFoundError):
         return True
     if isinstance(exc, KeyError):
         text = str(exc)
-        return text.startswith("\"Queue '") and text.endswith(" is not defined.\"")
+        return text.startswith("\"Queue '") and text.endswith(' is not defined."')
     response = getattr(exc, "response", None)
     if not isinstance(response, dict):
         return False

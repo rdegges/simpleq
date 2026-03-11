@@ -12,6 +12,7 @@ from simpleq.queue import (
     encode_message_attributes,
     is_missing_queue_error,
     normalize_queue_name,
+    validate_positive_limit,
 )
 
 
@@ -86,6 +87,67 @@ def test_queue_validates_fifo_options() -> None:
         queue._validate_message_options(
             delay_seconds=0, message_group_id="group", deduplication_id=None
         )
+
+
+def test_queue_rejects_non_integer_delay_seconds() -> None:
+    queue = SimpleQ().queue("emails")
+
+    with pytest.raises(QueueValidationError, match="delay_seconds must be an integer"):
+        queue._validate_message_options(
+            delay_seconds="1",  # type: ignore[arg-type]
+            message_group_id=None,
+            deduplication_id=None,
+        )
+
+
+def test_queue_rejects_non_integer_receive_options() -> None:
+    queue = SimpleQ().queue("emails")
+
+    with pytest.raises(QueueValidationError, match="max_messages must be an integer"):
+        queue._validate_receive_options(
+            max_messages="1",  # type: ignore[arg-type]
+            wait_seconds=0,
+            visibility_timeout=None,
+        )
+
+    with pytest.raises(QueueValidationError, match="wait_seconds must be an integer"):
+        queue._validate_receive_options(
+            max_messages=1,
+            wait_seconds="0",  # type: ignore[arg-type]
+            visibility_timeout=None,
+        )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="visibility_timeout must be an integer",
+    ):
+        queue._validate_receive_options(
+            max_messages=1,
+            wait_seconds=0,
+            visibility_timeout="30",  # type: ignore[arg-type]
+        )
+
+
+def test_queue_rejects_non_integer_limit_values() -> None:
+    with pytest.raises(QueueValidationError, match="limit must be an integer"):
+        validate_positive_limit("limit", "10")  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_change_visibility_rejects_non_integer_timeout() -> None:
+    queue = SimpleQ().queue("emails")
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name=queue.name,
+        receipt_handle="receipt-handle",
+    )
+
+    with pytest.raises(
+        QueueValidationError, match="visibility_timeout must be an integer"
+    ):
+        await queue.change_visibility(job, "5")  # type: ignore[arg-type]
 
 
 def test_standard_queue_rejects_fifo_routing_options() -> None:
@@ -311,7 +373,9 @@ async def test_enqueue_rejects_fifo_routing_on_standard_queue() -> None:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_rejects_explicit_empty_fifo_ids_without_metadata_fallback() -> None:
+async def test_enqueue_rejects_explicit_empty_fifo_ids_without_metadata_fallback() -> (
+    None
+):
     queue = SimpleQ().queue("orders.fifo", fifo=True)
     job = Job(
         task_name="tests.fixtures.tasks:record_sync",
@@ -338,7 +402,9 @@ async def test_enqueue_rejects_explicit_empty_fifo_ids_without_metadata_fallback
 
 
 @pytest.mark.asyncio
-async def test_enqueue_many_rejects_explicit_empty_fifo_ids_without_metadata_fallback() -> None:
+async def test_enqueue_many_rejects_explicit_empty_fifo_ids_without_metadata_fallback() -> (
+    None
+):
     queue = SimpleQ().queue("orders.fifo", fifo=True)
     job = Job(
         task_name="tests.fixtures.tasks:record_sync",
