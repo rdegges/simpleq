@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+from numbers import Real
 from typing import TYPE_CHECKING, Any
 
 from simpleq._sync import run_sync
@@ -32,10 +33,18 @@ class Worker:
         resolved_queues = list(queues)
         if not resolved_queues:
             raise ValueError("at least one queue must be configured.")
+        if not _is_strict_int(concurrency):
+            raise ValueError("concurrency must be an integer.")
         if concurrency < 1:
             raise ValueError("concurrency must be at least 1.")
+        if not _is_strict_real(poll_interval):
+            raise ValueError("poll_interval must be a number.")
         if poll_interval < 0:
             raise ValueError("poll_interval must be non-negative.")
+        if receive_timeout_seconds is not None and not _is_strict_real(
+            receive_timeout_seconds
+        ):
+            raise ValueError("receive_timeout_seconds must be a number.")
         if receive_timeout_seconds is not None and receive_timeout_seconds <= 0:
             raise ValueError("receive_timeout_seconds must be greater than 0.")
         self.simpleq = simpleq
@@ -348,3 +357,13 @@ def queue_has_dlq(queue: Any) -> bool:
     if getattr(queue, "dlq", False):
         return True
     return getattr(queue, "dlq_name", None) is not None
+
+
+def _is_strict_int(value: Any) -> bool:
+    """Return whether ``value`` is an integer but not a boolean."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_strict_real(value: Any) -> bool:
+    """Return whether ``value`` is a real number but not a boolean."""
+    return isinstance(value, Real) and not isinstance(value, bool)

@@ -49,6 +49,9 @@ sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
 If you run workers against a network path that can hang, pass
 `receive_timeout_seconds` to `sq.worker(...)` so one stalled receive does not
 block processing from other queues.
+Worker runtime options are strict: `concurrency` must be an integer, while
+`poll_interval` and `receive_timeout_seconds` must be numeric values
+(booleans are rejected).
 
 Treat each queue name as a single definition per `SimpleQ` instance. Reuse the
 same `queue` object, or pass the same FIFO/DLQ/retry/timing settings each time

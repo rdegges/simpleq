@@ -73,6 +73,43 @@ def test_worker_rejects_invalid_runtime_options() -> None:
         Worker(simpleq, [queue], concurrency=1, receive_timeout_seconds=0)
 
 
+def test_worker_rejects_non_strict_numeric_runtime_types() -> None:
+    simpleq = SimpleQ()
+    queue = FakeQueue(simpleq=simpleq)
+
+    with pytest.raises(ValueError, match="concurrency must be an integer"):
+        Worker(simpleq, [queue], concurrency=True)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="concurrency must be an integer"):
+        Worker(simpleq, [queue], concurrency=1.5)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="poll_interval must be a number"):
+        Worker(simpleq, [queue], concurrency=1, poll_interval="0.1")  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="poll_interval must be a number"):
+        Worker(simpleq, [queue], concurrency=1, poll_interval=True)  # type: ignore[arg-type]
+
+    with pytest.raises(
+        ValueError, match="receive_timeout_seconds must be a number"
+    ):
+        Worker(
+            simpleq,
+            [queue],
+            concurrency=1,
+            receive_timeout_seconds="2",  # type: ignore[arg-type]
+        )
+
+    with pytest.raises(
+        ValueError, match="receive_timeout_seconds must be a number"
+    ):
+        Worker(
+            simpleq,
+            [queue],
+            concurrency=1,
+            receive_timeout_seconds=True,  # type: ignore[arg-type]
+        )
+
+
 @pytest.mark.asyncio
 async def test_worker_handles_retry_and_dlq() -> None:
     simpleq = SimpleQ()
