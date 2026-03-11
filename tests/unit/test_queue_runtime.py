@@ -634,3 +634,39 @@ async def test_get_dlq_jobs_ignores_visibility_reset_errors_after_yield(
 
     jobs = [received async for received in queue.get_dlq_jobs(limit=1)]
     assert len(jobs) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [0, -1])
+async def test_iter_jobs_rejects_non_positive_limit(
+    simpleq_with_fake_transport: SimpleQ,
+    limit: int,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", wait_seconds=0)
+
+    with pytest.raises(QueueValidationError, match="limit must be at least 1"):
+        [job async for job in queue.iter_jobs(limit=limit)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [0, -1])
+async def test_get_dlq_jobs_rejects_non_positive_limit(
+    simpleq_with_fake_transport: SimpleQ,
+    limit: int,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", dlq=True, wait_seconds=0)
+
+    with pytest.raises(QueueValidationError, match="limit must be at least 1"):
+        [job async for job in queue.get_dlq_jobs(limit=limit)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [0, -1])
+async def test_redrive_dlq_jobs_rejects_non_positive_limit(
+    simpleq_with_fake_transport: SimpleQ,
+    limit: int,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", dlq=True, wait_seconds=0)
+
+    with pytest.raises(QueueValidationError, match="limit must be at least 1"):
+        await queue.redrive_dlq_jobs(limit=limit)

@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 import typer
+from typer.testing import CliRunner
 
 from simpleq import SimpleQ
 from simpleq.cli import (
+    app,
     collect_dlq_jobs,
     cost_report,
     dashboard_serve,
@@ -41,6 +43,8 @@ from tests.fixtures.tasks import record_sync
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+runner = CliRunner()
 
 
 class FakeJob:
@@ -260,6 +264,20 @@ def test_dlq_cost_metrics_and_dashboard_commands(
     )
     dashboard_serve(host="0.0.0.0", port=8081, queue_names=["emails"])
     assert fake_server.called is True
+
+
+def test_dlq_list_rejects_non_positive_limit_via_cli() -> None:
+    result = runner.invoke(app, ["dlq", "list", "emails", "--limit", "0"])
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--limit'" in result.output
+
+
+def test_dlq_redrive_rejects_non_positive_limit_via_cli() -> None:
+    result = runner.invoke(app, ["dlq", "redrive", "emails", "--limit", "0"])
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--limit'" in result.output
 
 
 def test_queue_stats_command_includes_dlq_depth(

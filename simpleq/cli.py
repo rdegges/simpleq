@@ -428,7 +428,7 @@ def queue_purge(
 def dlq_list(
     name: str,
     fifo: Annotated[bool, typer.Option("--fifo")] = False,
-    limit: Annotated[int, typer.Option("--limit")] = 10,
+    limit: Annotated[int, typer.Option("--limit", min=1)] = 10,
     endpoint_url: Annotated[str | None, typer.Option("--endpoint-url")] = None,
     region: Annotated[str | None, typer.Option("--region")] = None,
 ) -> None:
@@ -443,7 +443,7 @@ def dlq_list(
 def dlq_redrive(
     name: str,
     fifo: Annotated[bool, typer.Option("--fifo")] = False,
-    limit: Annotated[int | None, typer.Option("--limit")] = None,
+    limit: Annotated[int | None, typer.Option("--limit", min=1)] = None,
     endpoint_url: Annotated[str | None, typer.Option("--endpoint-url")] = None,
     region: Annotated[str | None, typer.Option("--region")] = None,
 ) -> None:

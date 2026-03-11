@@ -414,6 +414,7 @@ class Queue:
         wait_seconds: int | None = None,
     ) -> AsyncIterator[Job]:
         """Yield jobs until the queue is empty or ``limit`` is reached."""
+        validate_positive_limit("limit", limit)
         yielded = 0
         while True:
             remaining = None if limit is None else limit - yielded
@@ -503,6 +504,7 @@ class Queue:
         """Yield jobs currently in the DLQ."""
         if self.dlq_name is None:
             raise QueueValidationError("DLQ support is not enabled for this queue.")
+        validate_positive_limit("limit", limit)
 
         dlq_queue = self._dlq_queue()
         received: list[Job] = []
@@ -532,6 +534,7 @@ class Queue:
         """Move messages from the DLQ back to the primary queue."""
         if self.dlq_name is None:
             raise QueueValidationError("DLQ support is not enabled for this queue.")
+        validate_positive_limit("limit", limit)
         count = 0
         dlq_queue = self._dlq_queue()
         async for job in dlq_queue.iter_jobs(
@@ -883,6 +886,14 @@ def validate_queue_tags(tags: dict[str, str] | None) -> dict[str, str]:
             )
         copied_tags[key] = value
     return copied_tags
+
+
+def validate_positive_limit(name: str, value: int | None) -> None:
+    """Validate optional ``limit`` style arguments."""
+    if value is None:
+        return
+    if value < 1:
+        raise QueueValidationError(f"{name} must be at least 1.")
 
 
 def string_metadata(value: Any) -> str | None:

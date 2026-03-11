@@ -42,4 +42,6 @@ simpleq dlq list emails
 simpleq dlq redrive emails
 ```
 
+Both commands accept `--limit`, which must be `>= 1`.
+
 Use a DLQ when failures are actionable. Do not hide permanent failures behind endless retries.
