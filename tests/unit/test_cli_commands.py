@@ -27,6 +27,7 @@ from simpleq.cli import (
     main,
     make_client,
     metrics_serve,
+    parse_invocation_payload,
     queue_create,
     queue_delete,
     queue_purge,
@@ -383,3 +384,19 @@ def test_run_reloading_worker_rejects_missing_imports() -> None:
             endpoint_url=None,
             region=None,
         )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected_message"),
+    [
+        ({"args_json": "["}, "--args-json must contain valid JSON."),
+        ({"kwargs_json": "{"}, "--kwargs-json must contain valid JSON."),
+        ({"payload_json": "{"}, "--payload-json must contain valid JSON."),
+    ],
+)
+def test_parse_invocation_payload_rejects_invalid_json(
+    kwargs: dict[str, str],
+    expected_message: str,
+) -> None:
+    with pytest.raises(typer.BadParameter, match=expected_message):
+        parse_invocation_payload(**kwargs)

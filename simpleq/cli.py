@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 from dataclasses import asdict, replace
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -129,23 +130,32 @@ def parse_invocation_payload(
     payload_json: str | None = None,
 ) -> tuple[tuple[Any, ...], dict[str, Any]]:
     """Parse CLI JSON into task args and kwargs."""
+
+    def parse_json(value: str, *, option_name: str) -> Any:
+        try:
+            return json.loads(value)
+        except JSONDecodeError as exc:
+            raise typer.BadParameter(
+                f"{option_name} must contain valid JSON."
+            ) from exc
+
     provided = [value is not None for value in (args_json, kwargs_json, payload_json)]
     if sum(provided) > 1:
         raise typer.BadParameter(
             "Use only one of --args-json, --kwargs-json, or --payload-json."
         )
     if args_json is not None:
-        parsed = json.loads(args_json)
+        parsed = parse_json(args_json, option_name="--args-json")
         if not isinstance(parsed, list):
             raise typer.BadParameter("--args-json must decode to a JSON array.")
         return tuple(parsed), {}
     if kwargs_json is not None:
-        parsed = json.loads(kwargs_json)
+        parsed = parse_json(kwargs_json, option_name="--kwargs-json")
         if not isinstance(parsed, dict):
             raise typer.BadParameter("--kwargs-json must decode to a JSON object.")
         return (), parsed
     if payload_json is not None:
-        parsed = json.loads(payload_json)
+        parsed = parse_json(payload_json, option_name="--payload-json")
         if isinstance(parsed, list):
             return tuple(parsed), {}
         if isinstance(parsed, dict):
