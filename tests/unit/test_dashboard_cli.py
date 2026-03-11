@@ -34,7 +34,14 @@ class FakeCostTracker:
         return 0.123
 
     def snapshot(self) -> dict[str, dict[str, int]]:
-        return {"emails": {"total_requests": 2, "jobs_processed": 1, "jobs_retried": 0}}
+        return {
+            "emails": {
+                "total_requests": 2,
+                "jobs_processed": 1,
+                "jobs_retried": 0,
+                "jobs_decode_failed": 0,
+            }
+        }
 
 
 class FakeMetrics:

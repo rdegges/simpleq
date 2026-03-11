@@ -65,6 +65,7 @@ class QueueCostMetrics:
     jobs_enqueued: int = 0
     jobs_processed: int = 0
     jobs_failed: int = 0
+    jobs_decode_failed: int = 0
     jobs_retried: int = 0
     processing_time_ms: float = 0.0
 
@@ -117,6 +118,10 @@ class CostTracker:
     def job_failed(self, queue_name: str) -> None:
         """Track a failed job."""
         self.metrics_for(queue_name).jobs_failed += 1
+
+    def job_decode_failed(self, queue_name: str) -> None:
+        """Track a malformed message that could not be decoded into a job."""
+        self.metrics_for(queue_name).jobs_decode_failed += 1
 
     def job_retried(self, queue_name: str) -> None:
         """Track a retried job."""

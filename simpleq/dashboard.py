@@ -111,6 +111,7 @@ _DASHBOARD_TEMPLATE = Template(
               <th>Requests</th>
               <th>Processed</th>
               <th>Retried</th>
+              <th>Decode errors</th>
             </tr>
           </thead>
           <tbody>
@@ -120,10 +121,11 @@ _DASHBOARD_TEMPLATE = Template(
               <td>{{ metrics.total_requests }}</td>
               <td>{{ metrics.jobs_processed }}</td>
               <td>{{ metrics.jobs_retried }}</td>
+              <td>{{ metrics.get("jobs_decode_failed", 0) }}</td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="4" class="muted">No local metrics yet.</td>
+              <td colspan="5" class="muted">No local metrics yet.</td>
             </tr>
             {% endfor %}
           </tbody>

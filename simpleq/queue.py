@@ -640,6 +640,7 @@ class Queue:
             status="decode_error",
             duration_seconds=0.0,
         )
+        self.simpleq.cost_tracker.job_decode_failed(self.name)
         if not isinstance(receipt_handle, str) or not receipt_handle:
             self.simpleq.logger.warning(
                 "queue_malformed_message_missing_receipt_handle",

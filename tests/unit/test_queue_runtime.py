@@ -431,6 +431,10 @@ async def test_queue_receive_skips_and_deletes_malformed_messages(
 
     assert [job.message_id for job in received] == ["mid-good"]
     assert simpleq_with_fake_transport.transport.deleted_messages == ["receipt-bad"]
+    assert (
+        simpleq_with_fake_transport.cost_tracker.metrics_for("emails").jobs_decode_failed
+        == 1
+    )
 
 
 @pytest.mark.asyncio

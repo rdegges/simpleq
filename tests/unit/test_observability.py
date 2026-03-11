@@ -12,12 +12,14 @@ def test_cost_tracker_aggregates_requests_and_cost() -> None:
     tracker.job_enqueued("emails", count=2)
     tracker.job_completed("emails", duration_ms=25)
     tracker.job_failed("emails")
+    tracker.job_decode_failed("emails")
     tracker.job_retried("emails")
     metrics = tracker.metrics_for("emails")
     assert metrics.total_requests == 3
     assert metrics.send_requests == 2
     assert metrics.receive_requests == 1
     assert metrics.jobs_enqueued == 2
+    assert metrics.jobs_decode_failed == 1
     assert tracker.total_cost() == 3 * (0.50 / 1_000_000)
     assert metrics.average_processing_time_ms == 25
     assert tracker.snapshot()["emails"]["jobs_processed"] == 1

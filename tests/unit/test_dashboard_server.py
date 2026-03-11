@@ -39,7 +39,14 @@ class FakeCostTracker:
         return 0.5
 
     def snapshot(self) -> dict[str, dict[str, int]]:
-        return {"emails": {"total_requests": 1, "jobs_processed": 1, "jobs_retried": 0}}
+        return {
+            "emails": {
+                "total_requests": 1,
+                "jobs_processed": 1,
+                "jobs_retried": 0,
+                "jobs_decode_failed": 2,
+            }
+        }
 
 
 class FakeMetrics:
@@ -66,6 +73,7 @@ def test_dashboard_render_with_explicit_queue_names() -> None:
     assert "SimpleQ Dashboard" in html
     assert "emails" in html
     assert "DLQ visible" in html
+    assert "Decode errors" in html
     assert "2" in html
 
 

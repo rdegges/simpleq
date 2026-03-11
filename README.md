@@ -51,6 +51,9 @@ wait for delayed messages that become visible during `receive(..., wait_seconds=
 `Queue.stats()` and the built-in dashboard also surface DLQ depth when DLQ
 support is enabled, so operators can spot backlogs without polling the dead
 letter queue separately.
+Malformed payload drops are also tracked as `jobs_decode_failed` in local
+cost reports and dashboard metrics, making upstream producer issues easier to
+spot during operations.
 For FIFO workflows, `Job.metadata` is reconciled with the current SQS
 `MessageGroupId` and `MessageDeduplicationId` on receive, so DLQ inspection and
 redrive tooling see the actual routing IDs in flight instead of stale serialized
