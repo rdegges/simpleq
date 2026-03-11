@@ -147,3 +147,38 @@ def test_job_from_sqs_message_ignores_malformed_attribute_entries() -> None:
     restored = Job.from_sqs_message("emails", message)
 
     assert restored.message_attributes == {"valid": "x"}
+
+
+def test_job_from_sqs_message_defaults_receive_count_when_attributes_missing() -> None:
+    message = {
+        "Body": Job(
+            task_name="tests.fixtures.tasks:record_sync",
+            args=("value",),
+            kwargs={},
+            queue_name="emails",
+        ).to_message_body(),
+        "Attributes": None,
+    }
+
+    restored = Job.from_sqs_message("emails", message)
+
+    assert restored.receive_count == 1
+
+
+@pytest.mark.parametrize("raw_count", ["not-a-number", "0", "-2", ""])
+def test_job_from_sqs_message_defaults_receive_count_for_invalid_values(
+    raw_count: str,
+) -> None:
+    message = {
+        "Body": Job(
+            task_name="tests.fixtures.tasks:record_sync",
+            args=("value",),
+            kwargs={},
+            queue_name="emails",
+        ).to_message_body(),
+        "Attributes": {"ApproximateReceiveCount": raw_count},
+    }
+
+    restored = Job.from_sqs_message("emails", message)
+
+    assert restored.receive_count == 1

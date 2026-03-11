@@ -110,7 +110,7 @@ class Job:
             str(message["Body"]),
             receipt_handle=message.get("ReceiptHandle"),
             message_id=message.get("MessageId"),
-            receive_count=int(system_attributes.get("ApproximateReceiveCount", "1")),
+            receive_count=_parse_receive_count(system_attributes),
             message_attributes=string_attributes,
         )
         if job.queue_name != queue_name:
@@ -176,3 +176,15 @@ def _set_metadata_value(
         return False
     metadata[key] = string_value
     return True
+
+
+def _parse_receive_count(system_attributes: Any) -> int:
+    """Parse ApproximateReceiveCount from system attributes with safe defaults."""
+    if not isinstance(system_attributes, dict):
+        return 1
+    raw_count = system_attributes.get("ApproximateReceiveCount", "1")
+    try:
+        receive_count = int(raw_count)
+    except (TypeError, ValueError):
+        return 1
+    return max(1, receive_count)
