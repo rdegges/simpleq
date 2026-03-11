@@ -126,6 +126,16 @@ def test_import_task_callable_rejects_invalid_name() -> None:
         import_task_callable("invalid-name")
 
 
+def test_import_task_callable_rejects_missing_module() -> None:
+    with pytest.raises(TaskNotRegisteredError, match="Could not import module"):
+        import_task_callable("tests.module_does_not_exist:record_sync")
+
+
+def test_import_task_callable_rejects_missing_attribute() -> None:
+    with pytest.raises(TaskNotRegisteredError, match="Could not resolve task attribute"):
+        import_task_callable("tests.fixtures.tasks:not_a_real_task")
+
+
 def test_import_task_callable_plain_function() -> None:
     assert import_task_callable("tests.fixtures.tasks:record_sync") is record_sync
 

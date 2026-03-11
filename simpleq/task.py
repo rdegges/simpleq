@@ -58,10 +58,21 @@ def import_task_definition(task_name: str) -> TaskDefinition:
     module_name, sep, attr_path = task_name.partition(":")
     if not sep:
         raise TaskNotRegisteredError(f"Invalid task name: {task_name}")
-    module = importlib.import_module(module_name)
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        raise TaskNotRegisteredError(
+            f"Could not import module '{module_name}' for task '{task_name}': {exc}"
+        ) from exc
     target: Any = module
-    for part in attr_path.split("."):
-        target = getattr(target, part)
+    try:
+        for part in attr_path.split("."):
+            target = getattr(target, part)
+    except AttributeError as exc:
+        raise TaskNotRegisteredError(
+            f"Could not resolve task attribute '{attr_path}' in module "
+            f"'{module_name}'."
+        ) from exc
     if isinstance(target, TaskHandle):
         return replace(target.definition, name=task_name)
     if callable(target):
