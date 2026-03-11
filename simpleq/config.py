@@ -90,6 +90,24 @@ def _endpoint_reachable(url: str) -> bool:
         return False
 
 
+def _normalize_endpoint_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized
+
+
+def _validate_endpoint_url(value: str) -> None:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(
+            "endpoint_url must be a valid HTTP or HTTPS URL, "
+            f"got: {value!r}."
+        )
+
+
 def resolve_endpoint_url_from_env() -> str | None:
     """Return an explicitly configured SQS endpoint from environment variables."""
     for env_name in (
@@ -185,7 +203,7 @@ class SimpleQConfig:
             or config.region
         )
         config.endpoint_url = (
-            endpoint_url
+            _normalize_endpoint_url(endpoint_url)
             or resolve_endpoint_url_from_env()
             or detect_localstack_endpoint()
         )
@@ -276,6 +294,8 @@ def validate_config(config: SimpleQConfig) -> None:
         name="sqs_price_per_million",
         value=config.sqs_price_per_million,
     )
+    if config.endpoint_url is not None:
+        _validate_endpoint_url(config.endpoint_url)
     normalized_default_queue_name = config.default_queue_name.strip()
     if not normalized_default_queue_name:
         raise ValueError("default_queue_name must be non-empty.")

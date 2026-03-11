@@ -94,6 +94,12 @@ def test_from_overrides_prefers_explicit_values(
     assert config.concurrency == 3
 
 
+def test_from_overrides_normalizes_explicit_endpoint_whitespace() -> None:
+    config = SimpleQConfig.from_overrides(endpoint_url="  http://localhost:4566  ")
+
+    assert config.endpoint_url == "http://localhost:4566"
+
+
 def test_from_overrides_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_DEFAULT_REGION", "ap-southeast-2")
     monkeypatch.setenv("SIMPLEQ_LOG_LEVEL", "DEBUG")
@@ -167,6 +173,20 @@ def test_from_overrides_rejects_invalid_float_env_with_context(
         ValueError, match="Invalid float for SIMPLEQ_SQS_PRICE_PER_MILLION"
     ):
         SimpleQConfig.from_overrides()
+
+
+def test_from_overrides_rejects_invalid_endpoint_url_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_ENDPOINT_URL", "localhost:4566")
+
+    with pytest.raises(ValueError, match="endpoint_url must be a valid HTTP or HTTPS"):
+        SimpleQConfig.from_overrides()
+
+
+def test_from_overrides_rejects_invalid_endpoint_url_explicit() -> None:
+    with pytest.raises(ValueError, match="endpoint_url must be a valid HTTP or HTTPS"):
+        SimpleQConfig.from_overrides(endpoint_url="localhost:4566")
 
 
 def test_from_overrides_normalizes_case_for_string_enums(
