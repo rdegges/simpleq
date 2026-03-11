@@ -377,6 +377,16 @@ async def test_send_message_batch_raises_on_partial_failure(
         )
 
 
+@pytest.mark.asyncio
+async def test_invalidate_queue_url_drops_cached_entry(transport: SQSClient) -> None:
+    await transport.get_queue_url("emails")
+    assert transport._queue_urls["emails"] == "https://example.com/emails"
+
+    transport.invalidate_queue_url("emails")
+
+    assert "emails" not in transport._queue_urls
+
+
 def test_uses_local_credentials() -> None:
     assert uses_local_credentials("http://localhost:4566") is True
     assert uses_local_credentials("http://localstack:4566") is True

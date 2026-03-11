@@ -332,7 +332,9 @@ class SQSClient:
             if "Id" in item and "MessageId" in item
         }
         missing_entry_ids = [
-            str(entry["Id"]) for entry in entries if str(entry["Id"]) not in ids_by_entry
+            str(entry["Id"])
+            for entry in entries
+            if str(entry["Id"]) not in ids_by_entry
         ]
         if missing_entry_ids:
             raise QueueBatchError(
@@ -411,6 +413,10 @@ class SQSClient:
         if url := await self.get_queue_url(queue_name):
             return url
         raise QueueNotFoundError(f"Queue '{queue_name}' does not exist.")
+
+    def invalidate_queue_url(self, queue_name: str) -> None:
+        """Drop a cached queue URL so it will be resolved again on next use."""
+        self._queue_urls.pop(queue_name, None)
 
 
 def uses_local_credentials(endpoint_url: str | None) -> bool:

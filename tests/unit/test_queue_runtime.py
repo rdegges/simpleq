@@ -248,6 +248,67 @@ async def test_queue_enqueue_recovers_from_stale_queue_url() -> None:
 
 
 @pytest.mark.asyncio
+async def test_queue_enqueue_recovers_when_transport_cache_is_stale() -> None:
+    class CachedUrlTransport(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self._valid_url = "https://example.com/emails-new"
+            self._cached_url = "https://example.com/emails-stale"
+            self.cache_invalidated = False
+
+        async def ensure_queue(
+            self,
+            name: str,
+            *,
+            attributes: dict[str, str] | None = None,
+            tags: dict[str, str] | None = None,
+        ) -> str:
+            self.ensured.append((name, attributes or {}, tags or {}))
+            if self.cache_invalidated:
+                return self._valid_url
+            return self._cached_url
+
+        def invalidate_queue_url(self, queue_name: str) -> None:
+            if queue_name == "emails":
+                self.cache_invalidated = True
+
+        async def send_message(
+            self,
+            queue_name: str,
+            queue_url: str,
+            **kwargs: Any,
+        ) -> str:
+            if queue_url != self._valid_url:
+                raise QueueNotFoundError("Queue was deleted.")
+            return await super().send_message(
+                queue_name,
+                queue_url,
+                **kwargs,
+            )
+
+    simpleq = SimpleQ()
+    transport = CachedUrlTransport()
+    simpleq.transport = transport
+    queue = simpleq.queue("emails", wait_seconds=0)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="emails",
+    )
+
+    message_id = await queue.enqueue(job)
+
+    assert message_id == "mid"
+    assert transport.cache_invalidated is True
+    assert [name for name, _attributes, _tags in transport.ensured] == [
+        "emails",
+        "emails",
+    ]
+    assert len(transport.sent) == 1
+
+
+@pytest.mark.asyncio
 async def test_queue_receive_skips_and_deletes_malformed_messages(
     simpleq_with_fake_transport: SimpleQ,
 ) -> None:
@@ -272,7 +333,9 @@ async def test_queue_receive_skips_and_deletes_malformed_messages(
         "Attributes": {"ApproximateReceiveCount": "1"},
         "MessageAttributes": {},
     }
-    simpleq_with_fake_transport.transport.receive_queue = [[malformed_message, valid_message]]
+    simpleq_with_fake_transport.transport.receive_queue = [
+        [malformed_message, valid_message]
+    ]
 
     received = await queue.receive(max_messages=2, wait_seconds=0)
 
@@ -510,8 +573,7 @@ async def test_fifo_dlq_and_redrive_preserve_group_and_rotate_deduplication_id(
     redrive_payload = Job.from_message_body(redrive_send["message_body"])
     assert redrive_payload.metadata["message_group_id"] == "customer-1"
     assert (
-        redrive_payload.metadata["deduplication_id"]
-        == redrive_send["deduplication_id"]
+        redrive_payload.metadata["deduplication_id"] == redrive_send["deduplication_id"]
     )
     assert "receipt-dlq" in simpleq_with_fake_transport.transport.deleted_messages
 

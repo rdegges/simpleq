@@ -741,6 +741,9 @@ class Queue:
                 error=str(exc),
             )
             self._queue_url = None
+            invalidate = getattr(self.simpleq.transport, "invalidate_queue_url", None)
+            if callable(invalidate):
+                invalidate(self.name)
             refreshed_url = await self.ensure_exists()
             return await call(refreshed_url)
 
