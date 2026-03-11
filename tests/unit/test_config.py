@@ -222,6 +222,26 @@ def test_from_overrides_normalizes_case_for_string_enums(
     assert config.backoff_strategy == "linear"
 
 
+def test_from_overrides_reads_retry_jitter_min_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_RETRY_JITTER_MIN_SECONDS", "4")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.retry_jitter_min_seconds == 4
+
+
+def test_from_overrides_prefers_explicit_retry_jitter_min_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_RETRY_JITTER_MIN_SECONDS", "4")
+
+    config = SimpleQConfig.from_overrides(retry_jitter_min_seconds=2)
+
+    assert config.retry_jitter_min_seconds == 2
+
+
 def test_cast_backoff_strategy_and_log_level_strip_whitespace() -> None:
     assert cast_backoff_strategy("  exponential  ") == "exponential"
     assert cast_backoff_strategy(" Exponential_Jitter ") == "exponential_jitter"
@@ -283,6 +303,10 @@ def test_from_overrides_rejects_invalid_default_queue_name(
             "visibility_timeout must be between 0 and 43200",
         ),
         ({"concurrency": 0}, "concurrency must be at least 1"),
+        (
+            {"retry_jitter_min_seconds": 0},
+            "retry_jitter_min_seconds must be at least 1",
+        ),
     ],
 )
 def test_from_overrides_rejects_invalid_numeric_ranges(

@@ -230,6 +230,48 @@ def test_retry_delay_exponential_jitter_strategy(
     assert calls == [(1, 4)]
 
 
+def test_retry_delay_exponential_jitter_uses_configured_jitter_floor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    queue = FakeQueue(simpleq=SimpleQ(), visibility_timeout=8)
+    jittered = Worker(
+        SimpleQ(backoff_strategy="exponential_jitter", retry_jitter_min_seconds=3),
+        [queue],
+        concurrency=1,
+    )
+    calls: list[tuple[int, int]] = []
+
+    def fake_randint(start: int, end: int) -> int:
+        calls.append((start, end))
+        return start
+
+    monkeypatch.setattr("simpleq.worker.random.randint", fake_randint)
+
+    assert jittered._retry_delay(queue, 3) == 3
+    assert calls == [(3, 4)]
+
+
+def test_retry_delay_exponential_jitter_caps_jitter_floor_to_visibility_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    queue = FakeQueue(simpleq=SimpleQ(), visibility_timeout=2)
+    jittered = Worker(
+        SimpleQ(backoff_strategy="exponential_jitter", retry_jitter_min_seconds=5),
+        [queue],
+        concurrency=1,
+    )
+    calls: list[tuple[int, int]] = []
+
+    def fake_randint(start: int, end: int) -> int:
+        calls.append((start, end))
+        return end
+
+    monkeypatch.setattr("simpleq.worker.random.randint", fake_randint)
+
+    assert jittered._retry_delay(queue, 2) == 2
+    assert calls == [(2, 2)]
+
+
 def test_retry_delay_exponential_jitter_uses_minimum_delay_of_one_second(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

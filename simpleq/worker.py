@@ -325,7 +325,11 @@ class Worker:
             return int(min(visibility_timeout, attempt))
         if strategy == "exponential_jitter":
             upper_bound = max(1, int(min(visibility_timeout, 2 ** max(attempt - 1, 0))))
-            return random.randint(1, upper_bound)
+            jitter_floor = int(
+                max(1, getattr(self.simpleq.config, "retry_jitter_min_seconds", 1))
+            )
+            lower_bound = min(jitter_floor, upper_bound)
+            return random.randint(lower_bound, upper_bound)
         return int(min(visibility_timeout, 2 ** max(attempt - 1, 0)))
 
 

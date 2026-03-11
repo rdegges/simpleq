@@ -175,6 +175,7 @@ class SimpleQConfig:
     graceful_shutdown_timeout: int = 30
     max_retries: int = 3
     backoff_strategy: BackoffStrategy = "exponential"
+    retry_jitter_min_seconds: int = 1
     enable_cost_tracking: bool = True
     enable_metrics: bool = True
     enable_tracing: bool = False
@@ -195,6 +196,7 @@ class SimpleQConfig:
         graceful_shutdown_timeout: int | None = None,
         max_retries: int | None = None,
         backoff_strategy: BackoffStrategy | None = None,
+        retry_jitter_min_seconds: int | None = None,
         enable_cost_tracking: bool | None = None,
         enable_metrics: bool | None = None,
         enable_tracing: bool | None = None,
@@ -242,6 +244,11 @@ class SimpleQConfig:
             backoff_strategy
             or os.getenv("SIMPLEQ_BACKOFF_STRATEGY")
             or config.backoff_strategy
+        )
+        config.retry_jitter_min_seconds = _coalesce_int(
+            retry_jitter_min_seconds,
+            "SIMPLEQ_RETRY_JITTER_MIN_SECONDS",
+            config.retry_jitter_min_seconds,
         )
         config.enable_cost_tracking = resolve_bool(
             explicit=enable_cost_tracking,
@@ -300,6 +307,11 @@ def validate_config(config: SimpleQConfig) -> None:
         minimum=0,
     )
     _validate_int_range(name="max_retries", value=config.max_retries, minimum=0)
+    _validate_int_range(
+        name="retry_jitter_min_seconds",
+        value=config.retry_jitter_min_seconds,
+        minimum=1,
+    )
     _validate_non_negative_float(
         name="sqs_price_per_million",
         value=config.sqs_price_per_million,
