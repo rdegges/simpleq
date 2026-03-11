@@ -265,8 +265,16 @@ class Queue:
         attributes: dict[str, str] | None = None,
     ) -> str:
         """Enqueue a single job."""
-        resolved_group_id = message_group_id or routing_message_group_id(job)
-        resolved_deduplication_id = deduplication_id or routing_deduplication_id(job)
+        resolved_group_id = (
+            message_group_id
+            if message_group_id is not None
+            else routing_message_group_id(job)
+        )
+        resolved_deduplication_id = (
+            deduplication_id
+            if deduplication_id is not None
+            else routing_deduplication_id(job)
+        )
         self._validate_message_options(
             delay_seconds=delay_seconds,
             message_group_id=resolved_group_id,
@@ -306,11 +314,15 @@ class Queue:
         payloads: list[dict[str, Any]] = []
         total_payload_size = 0
         for entry in entries:
-            resolved_group_id = entry.message_group_id or routing_message_group_id(
-                entry.job
+            resolved_group_id = (
+                entry.message_group_id
+                if entry.message_group_id is not None
+                else routing_message_group_id(entry.job)
             )
             resolved_deduplication_id = (
-                entry.deduplication_id or routing_deduplication_id(entry.job)
+                entry.deduplication_id
+                if entry.deduplication_id is not None
+                else routing_deduplication_id(entry.job)
             )
             self._validate_message_options(
                 delay_seconds=entry.delay_seconds,

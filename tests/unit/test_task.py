@@ -173,6 +173,38 @@ async def test_task_delay_surfaces_invalid_fifo_resolver_types() -> None:
         await handle.delay(123)
 
 
+@pytest.mark.asyncio
+async def test_task_delay_rejects_explicit_empty_fifo_ids_without_fallback() -> None:
+    simpleq = SimpleQ()
+    queue = simpleq.queue("orders.fifo", fifo=True)
+    handle = TaskHandle(
+        simpleq,
+        TaskDefinition(
+            name="tests.fixtures.tasks:record_async",
+            func=record_async,
+            queue_ref=queue,
+            message_group_id=lambda _: "resolver-group",
+            deduplication_id=lambda _: "resolver-dedup",
+        ),
+    )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="message_group_id must be a non-empty string",
+    ):
+        await handle.delay("payload", message_group_id="", deduplication_id="manual")
+
+    with pytest.raises(
+        QueueValidationError,
+        match="deduplication_id must be a non-empty string",
+    ):
+        await handle.delay(
+            "payload",
+            message_group_id="manual-group",
+            deduplication_id="",
+        )
+
+
 def test_normalize_schema_input_additional_branches() -> None:
     model = normalize_schema_input(
         EmailPayload,

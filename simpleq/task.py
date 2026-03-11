@@ -129,15 +129,23 @@ class TaskHandle(Generic[P, R]):
         """Validate arguments and enqueue a task invocation."""
         queue = self._simpleq.resolve_queue(self.definition.queue_ref)
         normalized_args, normalized_kwargs = self._normalize_arguments(args, kwargs)
-        resolved_group_id = message_group_id or resolve_value(
-            self.definition.message_group_id,
-            args,
-            kwargs,
+        resolved_group_id = (
+            message_group_id
+            if message_group_id is not None
+            else resolve_value(
+                self.definition.message_group_id,
+                args,
+                kwargs,
+            )
         )
-        resolved_dedup_id = deduplication_id or resolve_value(
-            self.definition.deduplication_id,
-            args,
-            kwargs,
+        resolved_dedup_id = (
+            deduplication_id
+            if deduplication_id is not None
+            else resolve_value(
+                self.definition.deduplication_id,
+                args,
+                kwargs,
+            )
         )
         job = Job(
             task_name=self.definition.name,

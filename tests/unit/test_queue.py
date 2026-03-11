@@ -6,7 +6,7 @@ import pytest
 
 from simpleq import SimpleQ
 from simpleq.exceptions import QueueValidationError
-from simpleq.job import Job
+from simpleq.job import DEDUPLICATION_METADATA_KEY, MESSAGE_GROUP_METADATA_KEY, Job
 from simpleq.queue import (
     BatchEntry,
     encode_message_attributes,
@@ -308,6 +308,64 @@ async def test_enqueue_rejects_fifo_routing_on_standard_queue() -> None:
         QueueValidationError, match="Standard queues do not support deduplication_id"
     ):
         await queue.enqueue(job, deduplication_id="dedup-1")
+
+
+@pytest.mark.asyncio
+async def test_enqueue_rejects_explicit_empty_fifo_ids_without_metadata_fallback() -> None:
+    queue = SimpleQ().queue("orders.fifo", fifo=True)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+        metadata={
+            MESSAGE_GROUP_METADATA_KEY: "metadata-group",
+            DEDUPLICATION_METADATA_KEY: "metadata-dedup",
+        },
+    )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="message_group_id must be a non-empty string",
+    ):
+        await queue.enqueue(job, message_group_id="", deduplication_id="manual-dedup")
+
+    with pytest.raises(
+        QueueValidationError,
+        match="deduplication_id must be a non-empty string",
+    ):
+        await queue.enqueue(job, message_group_id="manual-group", deduplication_id="")
+
+
+@pytest.mark.asyncio
+async def test_enqueue_many_rejects_explicit_empty_fifo_ids_without_metadata_fallback() -> None:
+    queue = SimpleQ().queue("orders.fifo", fifo=True)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+        metadata={
+            MESSAGE_GROUP_METADATA_KEY: "metadata-group",
+            DEDUPLICATION_METADATA_KEY: "metadata-dedup",
+        },
+    )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="message_group_id must be a non-empty string",
+    ):
+        await queue.enqueue_many(
+            [BatchEntry(job=job, message_group_id="", deduplication_id="manual-dedup")]
+        )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="deduplication_id must be a non-empty string",
+    ):
+        await queue.enqueue_many(
+            [BatchEntry(job=job, message_group_id="manual-group", deduplication_id="")]
+        )
 
 
 def test_is_missing_queue_error_accepts_transport_keyerror_shape() -> None:
