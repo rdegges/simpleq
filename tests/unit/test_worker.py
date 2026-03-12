@@ -519,6 +519,48 @@ async def test_worker_handles_unresolvable_task_without_crashing() -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_does_not_crash_when_ack_fails_after_success() -> None:
+    simpleq = SimpleQ()
+    definition = TaskDefinition(name=task_name_for(record_sync), func=record_sync)
+    simpleq.registry.register(definition)
+
+    class AckFailQueue(FakeQueue):
+        async def ack(self, job: Job) -> None:
+            raise RuntimeError("ack failed")
+
+    queue = AckFailQueue(simpleq=simpleq)
+    worker = Worker(simpleq, [queue], concurrency=1)
+    job = Job(
+        task_name=definition.name,
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+
+    await worker._process_job(queue, job, asyncio.Semaphore(1))
+
+    processed_samples = simpleq.metrics.jobs_processed.collect()[0].samples
+    ack_error_samples = [
+        sample
+        for sample in processed_samples
+        if sample.name == "simpleq_jobs_processed_total"
+        and sample.labels.get("queue") == queue.name
+        and sample.labels.get("status") == "ack_error"
+    ]
+    success_samples = [
+        sample
+        for sample in processed_samples
+        if sample.name == "simpleq_jobs_processed_total"
+        and sample.labels.get("queue") == queue.name
+        and sample.labels.get("status") == "success"
+    ]
+
+    assert len(ack_error_samples) == 1
+    assert ack_error_samples[0].value == 1
+    assert not success_samples
+
+
+@pytest.mark.asyncio
 async def test_worker_receive_timeout_returns_empty_batch() -> None:
     simpleq = SimpleQ()
 
