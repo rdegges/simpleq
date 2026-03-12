@@ -59,6 +59,8 @@ class FakeBotoSQSClient:
             raise ClientError({"Error": {"Code": "QueueDoesNotExist"}}, "GetQueueUrl")
         if QueueName == "broken":
             raise ClientError({"Error": {"Code": "AccessDenied"}}, "GetQueueUrl")
+        if QueueName == "malformed":
+            raise ClientError({}, "GetQueueUrl")
         return {"QueueUrl": f"https://example.com/{QueueName}"}
 
     def create_queue(
@@ -186,6 +188,14 @@ async def test_get_queue_url_cache_and_errors(transport: SQSClient) -> None:
     assert await transport.get_queue_url("missing") is None
     with pytest.raises(ClientError):
         await transport.get_queue_url("broken")
+
+
+@pytest.mark.asyncio
+async def test_get_queue_url_with_malformed_client_error_re_raises_client_error(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(ClientError):
+        await transport.get_queue_url("malformed")
 
 
 @pytest.mark.asyncio

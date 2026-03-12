@@ -19,6 +19,11 @@ if TYPE_CHECKING:
     from simpleq.config import SimpleQConfig
     from simpleq.observability import CostTracker, OperationName
 
+_MISSING_QUEUE_ERROR_CODES = {
+    "AWS.SimpleQueueService.NonExistentQueue",
+    "QueueDoesNotExist",
+}
+
 
 class SQSClient:
     """Thin async wrapper around the boto3 SQS client."""
@@ -85,11 +90,8 @@ class SQSClient:
                 QueueName=queue_name,
             )
         except ClientError as exc:
-            error_code = exc.response["Error"]["Code"]
-            if error_code in {
-                "AWS.SimpleQueueService.NonExistentQueue",
-                "QueueDoesNotExist",
-            }:
+            error_code = client_error_code(exc)
+            if error_code in _MISSING_QUEUE_ERROR_CODES:
                 return None
             raise
 
@@ -436,3 +438,20 @@ def uses_local_credentials(endpoint_url: str | None) -> bool:
         return ipaddress.ip_address(normalized).is_loopback
     except ValueError:
         return False
+
+
+def client_error_code(exc: ClientError) -> str | None:
+    """Extract a normalized error code from a ClientError payload."""
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return None
+    error = response.get("Error")
+    if not isinstance(error, dict):
+        return None
+    code = error.get("Code")
+    if not isinstance(code, str):
+        return None
+    normalized = code.strip()
+    if not normalized:
+        return None
+    return normalized
