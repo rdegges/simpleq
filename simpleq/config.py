@@ -93,6 +93,8 @@ def _endpoint_reachable(url: str) -> bool:
 def _normalize_endpoint_url(value: str | None) -> str | None:
     if value is None:
         return None
+    if not isinstance(value, str):
+        raise ValueError("endpoint_url must be a string.")
     normalized = value.strip()
     if not normalized:
         return None
@@ -101,6 +103,8 @@ def _normalize_endpoint_url(value: str | None) -> str | None:
 
 def _resolve_region(*, explicit: str | None, default: str) -> str:
     if explicit is not None:
+        if not isinstance(explicit, str):
+            raise ValueError("region must be a string.")
         normalized_explicit = explicit.strip()
         if not normalized_explicit:
             raise ValueError("region must be non-empty.")
@@ -271,16 +275,19 @@ class SimpleQConfig:
             explicit=enable_cost_tracking,
             env_name="SIMPLEQ_COST_TRACKING",
             default=config.enable_cost_tracking,
+            option_name="enable_cost_tracking",
         )
         config.enable_metrics = resolve_bool(
             explicit=enable_metrics,
             env_name="SIMPLEQ_ENABLE_METRICS",
             default=config.enable_metrics,
+            option_name="enable_metrics",
         )
         config.enable_tracing = resolve_bool(
             explicit=enable_tracing,
             env_name="SIMPLEQ_ENABLE_TRACING",
             default=config.enable_tracing,
+            option_name="enable_tracing",
         )
         config.log_level = cast_log_level(
             log_level or os.getenv("SIMPLEQ_LOG_LEVEL") or config.log_level
@@ -302,6 +309,8 @@ class SimpleQConfig:
 
 def validate_config(config: SimpleQConfig) -> None:
     """Validate resolved configuration values."""
+    if not isinstance(config.region, str):
+        raise ValueError("region must be a string.")
     if not config.region.strip():
         raise ValueError("region must be non-empty.")
     config.region = config.region.strip()
@@ -338,6 +347,8 @@ def validate_config(config: SimpleQConfig) -> None:
     )
     if config.endpoint_url is not None:
         _validate_endpoint_url(config.endpoint_url)
+    if not isinstance(config.default_queue_name, str):
+        raise ValueError("default_queue_name must be a string.")
     normalized_default_queue_name = config.default_queue_name.strip()
     if not normalized_default_queue_name:
         raise ValueError("default_queue_name must be non-empty.")
@@ -351,9 +362,18 @@ def validate_config(config: SimpleQConfig) -> None:
     config.default_queue_name = normalized_default_queue_name
 
 
-def resolve_bool(*, explicit: bool | None, env_name: str, default: bool) -> bool:
+def resolve_bool(
+    *,
+    explicit: bool | None,
+    env_name: str,
+    default: bool,
+    option_name: str | None = None,
+) -> bool:
     """Resolve a boolean from explicit input, env, and a default."""
     if explicit is not None:
+        if not isinstance(explicit, bool):
+            field_name = option_name or env_name
+            raise ValueError(f"{field_name} must be a boolean.")
         return explicit
     from_env = _bool_env(env_name)
     if from_env is None:
@@ -363,6 +383,8 @@ def resolve_bool(*, explicit: bool | None, env_name: str, default: bool) -> bool
 
 def cast_backoff_strategy(value: str) -> BackoffStrategy:
     """Validate a backoff strategy string."""
+    if not isinstance(value, str):
+        raise ValueError("backoff_strategy must be a string.")
     normalized = value.strip().lower()
     if normalized not in {
         "constant",
@@ -376,6 +398,8 @@ def cast_backoff_strategy(value: str) -> BackoffStrategy:
 
 def cast_log_level(value: str) -> Literal["DEBUG", "INFO", "WARNING", "ERROR"]:
     """Validate a log level string."""
+    if not isinstance(value, str):
+        raise ValueError("log_level must be a string.")
     normalized = value.strip().upper()
     if normalized not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
         raise ValueError(f"Unsupported log level: {value}")

@@ -275,6 +275,31 @@ def test_from_overrides_rejects_invalid_endpoint_url_explicit() -> None:
         SimpleQConfig.from_overrides(endpoint_url="localhost:4566")
 
 
+def test_from_overrides_rejects_non_string_region() -> None:
+    with pytest.raises(ValueError, match="region must be a string"):
+        SimpleQConfig.from_overrides(region=123)  # type: ignore[arg-type]
+
+
+def test_from_overrides_rejects_non_string_backoff_strategy() -> None:
+    with pytest.raises(ValueError, match="backoff_strategy must be a string"):
+        SimpleQConfig.from_overrides(backoff_strategy=123)  # type: ignore[arg-type]
+
+
+def test_from_overrides_rejects_non_string_log_level() -> None:
+    with pytest.raises(ValueError, match="log_level must be a string"):
+        SimpleQConfig.from_overrides(log_level=123)  # type: ignore[arg-type]
+
+
+def test_from_overrides_rejects_non_string_default_queue_name() -> None:
+    with pytest.raises(ValueError, match="default_queue_name must be a string"):
+        SimpleQConfig.from_overrides(default_queue_name=123)  # type: ignore[arg-type]
+
+
+def test_from_overrides_rejects_non_boolean_explicit_boolean_flags() -> None:
+    with pytest.raises(ValueError, match="enable_metrics must be a boolean"):
+        SimpleQConfig.from_overrides(enable_metrics=1)  # type: ignore[arg-type]
+
+
 def test_from_overrides_normalizes_case_for_string_enums(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
