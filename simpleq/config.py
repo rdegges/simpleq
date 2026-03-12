@@ -22,6 +22,8 @@ def _validate_int_range(
     minimum: int,
     maximum: int | None = None,
 ) -> None:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{name} must be an integer.")
     if value < minimum:
         if maximum is None:
             raise ValueError(f"{name} must be at least {minimum}.")
@@ -31,6 +33,8 @@ def _validate_int_range(
 
 
 def _validate_non_negative_float(*, name: str, value: float) -> None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise ValueError(f"{name} must be a number.")
     if value < 0:
         raise ValueError(f"{name} must be non-negative.")
 

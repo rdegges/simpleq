@@ -207,6 +207,22 @@ def test_from_overrides_rejects_invalid_integer_env_with_context(
         SimpleQConfig.from_overrides()
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"concurrency": True}, "concurrency must be an integer"),
+        ({"batch_size": 5.0}, "batch_size must be an integer"),
+        ({"max_retries": False}, "max_retries must be an integer"),
+    ],
+)
+def test_from_overrides_rejects_non_integer_explicit_numeric_values(
+    kwargs: dict[str, object],
+    match: str,
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        SimpleQConfig.from_overrides(**kwargs)
+
+
 def test_from_overrides_rejects_invalid_float_env_with_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -216,6 +232,11 @@ def test_from_overrides_rejects_invalid_float_env_with_context(
         ValueError, match="Invalid float for SIMPLEQ_SQS_PRICE_PER_MILLION"
     ):
         SimpleQConfig.from_overrides()
+
+
+def test_from_overrides_rejects_boolean_explicit_float_override() -> None:
+    with pytest.raises(ValueError, match="sqs_price_per_million must be a number"):
+        SimpleQConfig.from_overrides(sqs_price_per_million=True)
 
 
 def test_from_overrides_rejects_invalid_endpoint_url_env(
