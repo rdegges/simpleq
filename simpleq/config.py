@@ -209,6 +209,7 @@ class SimpleQConfig:
 
         config.region = (
             region
+            or os.getenv("SIMPLEQ_REGION")
             or os.getenv("AWS_REGION")
             or os.getenv("AWS_DEFAULT_REGION")
             or config.region

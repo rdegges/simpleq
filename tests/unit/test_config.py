@@ -129,6 +129,28 @@ def test_from_overrides_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.log_level == "DEBUG"
 
 
+def test_from_overrides_uses_simpleq_region_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_REGION", "eu-central-1")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.region == "eu-central-1"
+
+
+def test_from_overrides_prefers_simpleq_region_over_aws_region_envs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_REGION", "eu-central-1")
+    monkeypatch.setenv("AWS_REGION", "us-west-2")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "ap-southeast-2")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.region == "eu-central-1"
+
+
 def test_from_overrides_rejects_invalid_backoff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

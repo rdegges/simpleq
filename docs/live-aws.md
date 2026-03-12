@@ -9,7 +9,7 @@ Create a least-privilege IAM user or role for the smoke suite and store the cred
 ```bash
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
-AWS_DEFAULT_REGION=us-east-1
+SIMPLEQ_REGION=us-east-1
 ```
 
 The repository ignores `.env`, and the test suite never creates credentials automatically.
