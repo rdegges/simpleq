@@ -90,6 +90,19 @@ def encode_message_attributes(
             raise QueueValidationError(
                 "message attribute names may only contain letters, numbers, hyphens, underscores, or periods."
             )
+        if key.startswith(".") or key.endswith("."):
+            raise QueueValidationError(
+                "message attribute names must not start or end with a period."
+            )
+        if ".." in key:
+            raise QueueValidationError(
+                "message attribute names must not contain consecutive periods."
+            )
+        lowered_key = key.lower()
+        if lowered_key.startswith("aws.") or lowered_key.startswith("amazon."):
+            raise QueueValidationError(
+                "message attribute names must not start with 'AWS.' or 'Amazon.'."
+            )
         if not isinstance(value, str):
             raise QueueValidationError("message attribute values must be strings.")
         if len(value.encode("utf-8")) > _MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES:

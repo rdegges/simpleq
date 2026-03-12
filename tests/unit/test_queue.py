@@ -259,6 +259,24 @@ def test_encode_message_attributes_rejects_more_than_ten_attributes() -> None:
 
 
 @pytest.mark.parametrize(
+    ("attribute_name", "message"),
+    [
+        ("AWS.TraceId", "must not start with 'AWS.' or 'Amazon.'"),
+        ("amazon.request_id", "must not start with 'AWS.' or 'Amazon.'"),
+        (".trace", "must not start or end with a period"),
+        ("trace.", "must not start or end with a period"),
+        ("trace..id", "must not contain consecutive periods"),
+    ],
+)
+def test_encode_message_attributes_rejects_sqs_reserved_or_malformed_names(
+    attribute_name: str,
+    message: str,
+) -> None:
+    with pytest.raises(QueueValidationError, match=message):
+        encode_message_attributes({attribute_name: "value"})
+
+
+@pytest.mark.parametrize(
     ("attributes", "message"),
     [
         ({"": "value"}, "non-empty"),
@@ -276,7 +294,7 @@ def test_encode_message_attributes_rejects_invalid_attribute_names(
 
 def test_encode_message_attributes_rejects_non_string_value() -> None:
     with pytest.raises(QueueValidationError, match="must be strings"):
-        encode_message_attributes({"source": "tests", "attempt": 1})  # type: ignore[arg-type]
+        encode_message_attributes({"source": "tests", "attempt": 1})  # type: ignore[dict-item]
 
 
 def test_encode_message_attributes_allows_values_over_256_kib_up_to_1_mib() -> None:
