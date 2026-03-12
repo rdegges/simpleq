@@ -9,6 +9,7 @@ from typing import (
     ParamSpec,
     TypeVar,
 )
+from urllib.parse import urlparse
 
 from simpleq._sync import run_sync
 from simpleq.config import BackoffStrategy, SimpleQConfig
@@ -274,7 +275,11 @@ class SimpleQ:
     async def list_queues(self, prefix: str | None = None) -> list[str]:
         """List SQS queue names, optionally filtered by prefix."""
         urls = await self.transport.list_queues(prefix)
-        names = [url.rsplit("/", 1)[-1] for url in urls]
+        names = [
+            queue_name
+            for url in urls
+            if (queue_name := queue_name_from_reference(url)) is not None
+        ]
         return sorted(dict.fromkeys(names))
 
     def list_queues_sync(self, prefix: str | None = None) -> list[str]:
@@ -284,3 +289,20 @@ class SimpleQ:
     def run_sync(self, awaitable: Any) -> Any:
         """Expose the sync helper for CLI callers."""
         return run_sync(awaitable)
+
+
+def queue_name_from_reference(reference: str) -> str | None:
+    """Extract a queue name from either a URL or queue-name-like reference."""
+    normalized = reference.strip()
+    if not normalized:
+        return None
+    if "://" not in normalized:
+        candidate = normalized.rstrip("/").rsplit("/", 1)[-1]
+        return candidate or None
+
+    parsed = urlparse(normalized)
+    path = parsed.path.rstrip("/")
+    if not path:
+        return None
+    queue_name = path.rsplit("/", 1)[-1]
+    return queue_name or None

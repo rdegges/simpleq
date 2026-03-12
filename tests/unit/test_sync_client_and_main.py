@@ -235,6 +235,34 @@ async def test_simpleq_list_queues_returns_sorted_unique_queue_names(
     ]
 
 
+@pytest.mark.asyncio
+async def test_simpleq_list_queues_ignores_malformed_queue_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+
+    async def fake_list(prefix: str | None) -> list[str]:
+        assert prefix == "simpleq-test-"
+        return [
+            "https://sqs.aws/123/simpleq-test-a/",
+            "https://sqs.aws/123/simpleq-test-b",
+            "simpleq-test-c",
+            "https://sqs.aws/",
+            "",
+            "   ",
+        ]
+
+    monkeypatch.setattr(simpleq.transport, "list_queues", fake_list)
+
+    queues = await simpleq.list_queues("simpleq-test-")
+
+    assert queues == [
+        "simpleq-test-a",
+        "simpleq-test-b",
+        "simpleq-test-c",
+    ]
+
+
 def test_module_entrypoint_invokes_cli_main(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {"value": False}
     monkeypatch.setattr("simpleq.cli.main", lambda: called.__setitem__("value", True))
