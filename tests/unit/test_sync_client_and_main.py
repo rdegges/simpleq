@@ -9,6 +9,7 @@ import pytest
 
 from simpleq import SimpleQ
 from simpleq._sync import run_sync
+from simpleq.client import queue_name_from_reference
 from simpleq.exceptions import QueueValidationError
 from simpleq.queue import Queue
 from simpleq.testing import InMemoryTransport
@@ -247,6 +248,8 @@ async def test_simpleq_list_queues_ignores_malformed_queue_urls(
             "https://sqs.aws/123/simpleq-test-a/",
             "https://sqs.aws/123/simpleq-test-b",
             "simpleq-test-c",
+            "https://sqs.aws/123/not valid",
+            "gopher://sqs.aws/123/simpleq-test-z",
             "https://sqs.aws/",
             "",
             "   ",
@@ -261,6 +264,28 @@ async def test_simpleq_list_queues_ignores_malformed_queue_urls(
         "simpleq-test-b",
         "simpleq-test-c",
     ]
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        ("https://sqs.us-east-1.amazonaws.com/123456789012/emails", "emails"),
+        (
+            "https://sqs.us-east-1.amazonaws.com/123456789012/orders%2Efifo",
+            "orders.fifo",
+        ),
+        ("simpleq-plain-name", "simpleq-plain-name"),
+        ("https://sqs.aws/123/invalid name", None),
+        ("gopher://sqs.aws/123/simpleq-test-z", None),
+        ("", None),
+        ("   ", None),
+    ],
+)
+def test_queue_name_from_reference_parses_and_validates(
+    reference: str,
+    expected: str | None,
+) -> None:
+    assert queue_name_from_reference(reference) == expected
 
 
 def test_module_entrypoint_invokes_cli_main(monkeypatch: pytest.MonkeyPatch) -> None:

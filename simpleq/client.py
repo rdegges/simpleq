@@ -9,13 +9,13 @@ from typing import (
     ParamSpec,
     TypeVar,
 )
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from simpleq._sync import run_sync
 from simpleq.config import BackoffStrategy, SimpleQConfig
 from simpleq.exceptions import InvalidTaskError, QueueValidationError
 from simpleq.observability import CostTracker, PrometheusMetrics, configure_logging
-from simpleq.queue import Queue
+from simpleq.queue import Queue, normalize_queue_name
 from simpleq.sqs import SQSClient
 from simpleq.task import TaskDefinition, TaskHandle, TaskRegistry, task_name_for
 from simpleq.worker import Worker
@@ -298,11 +298,23 @@ def queue_name_from_reference(reference: str) -> str | None:
         return None
     if "://" not in normalized:
         candidate = normalized.rstrip("/").rsplit("/", 1)[-1]
-        return candidate or None
+        return _validated_queue_name(candidate)
 
     parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"}:
+        return None
     path = parsed.path.rstrip("/")
     if not path:
         return None
-    queue_name = path.rsplit("/", 1)[-1]
-    return queue_name or None
+    queue_name = unquote(path.rsplit("/", 1)[-1])
+    return _validated_queue_name(queue_name)
+
+
+def _validated_queue_name(candidate: str) -> str | None:
+    """Return a normalized queue name or ``None`` when the candidate is invalid."""
+    if not candidate:
+        return None
+    try:
+        return normalize_queue_name(candidate, fifo=candidate.endswith(".fifo"))
+    except QueueValidationError:
+        return None
