@@ -364,6 +364,46 @@ async def test_queue_purge_recovers_from_stale_queue_url() -> None:
 
 
 @pytest.mark.asyncio
+async def test_queue_delete_recovers_from_stale_queue_url() -> None:
+    class FlakyDeleteTransport(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.cache_invalidated = False
+            self.cached_urls: dict[str, str] = {
+                "emails": "https://example.com/emails-stale"
+            }
+
+        async def get_queue_url(self, queue_name: str) -> str | None:
+            return self.cached_urls.get(queue_name)
+
+        async def delete_queue(
+            self,
+            queue_name: str,
+            queue_url: str,
+        ) -> None:
+            if queue_name == "emails":
+                raise QueueNotFoundError("Queue was deleted.")
+            await super().delete_queue(queue_name, queue_url)
+
+        def invalidate_queue_url(self, queue_name: str) -> None:
+            if queue_name == "emails":
+                self.cache_invalidated = True
+                self.cached_urls.pop(queue_name, None)
+
+    simpleq = SimpleQ()
+    transport = FlakyDeleteTransport()
+    simpleq.transport = transport
+    queue = simpleq.queue("emails", wait_seconds=0)
+
+    await queue.delete()
+
+    assert transport.deleted == []
+    assert transport.cache_invalidated is True
+    assert transport.cached_urls == {}
+    assert transport.ensured == []
+
+
+@pytest.mark.asyncio
 async def test_queue_stats_recovers_from_stale_queue_url() -> None:
     class FlakyStatsTransport(FakeTransport):
         def __init__(self) -> None:

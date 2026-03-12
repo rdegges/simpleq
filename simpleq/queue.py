@@ -235,10 +235,28 @@ class Queue:
 
     async def delete(self) -> None:
         """Delete the queue and its DLQ when present."""
-        queue_url = await self.ensure_exists()
-        await self.simpleq.transport.delete_queue(self.name, queue_url)
-        if self.dlq_name and self._dlq_url:
-            await self.simpleq.transport.delete_queue(self.dlq_name, self._dlq_url)
+        queue_url = await self._queue_url_for_delete(self.name, self._queue_url)
+        if queue_url is not None:
+            try:
+                await self.simpleq.transport.delete_queue(self.name, queue_url)
+            except Exception as exc:
+                if not is_missing_queue_error(exc):
+                    raise
+
+        if self.dlq_name is not None:
+            dlq_url = await self._queue_url_for_delete(self.dlq_name, self._dlq_url)
+            if dlq_url is not None:
+                try:
+                    await self.simpleq.transport.delete_queue(self.dlq_name, dlq_url)
+                except Exception as exc:
+                    if not is_missing_queue_error(exc):
+                        raise
+
+        invalidate = getattr(self.simpleq.transport, "invalidate_queue_url", None)
+        if callable(invalidate):
+            invalidate(self.name)
+            if self.dlq_name is not None:
+                invalidate(self.dlq_name)
         self._queue_url = None
         self._dlq_url = None
 
@@ -759,6 +777,21 @@ class Queue:
             visibility_timeout=visibility_timeout,
         )
         return queue_url, messages
+
+    async def _queue_url_for_delete(
+        self,
+        queue_name: str,
+        cached_url: str | None,
+    ) -> str | None:
+        """Resolve a queue URL for delete operations without creating a queue."""
+        if cached_url is not None:
+            return cached_url
+        get_queue_url = getattr(self.simpleq.transport, "get_queue_url", None)
+        if callable(get_queue_url):
+            return await get_queue_url(queue_name)
+        if queue_name == self.name:
+            return await self.ensure_exists()
+        return None
 
     async def _with_refreshed_queue_url(
         self,

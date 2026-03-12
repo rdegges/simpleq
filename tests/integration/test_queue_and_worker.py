@@ -163,6 +163,29 @@ async def test_ensure_exists_reconciles_existing_queue_tags(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_delete_recovers_from_stale_cached_queue_url(
+    simpleq_localstack,
+    unique_name,
+) -> None:
+    queue = simpleq_localstack.queue(unique_name("stale-delete"), wait_seconds=0)
+    queue_url = await queue.ensure_exists()
+
+    await asyncio.to_thread(
+        simpleq_localstack.transport.client.delete_queue,
+        QueueUrl=queue_url,
+    )
+
+    await queue.delete()
+    simpleq_localstack.transport.invalidate_queue_url(queue.name)
+
+    async def queue_deleted() -> bool:
+        return await simpleq_localstack.transport.get_queue_url(queue.name) is None
+
+    await eventually(queue_deleted)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_worker_lazy_import_preserves_schema_metadata(
     localstack_endpoint: str,
     unique_name,
