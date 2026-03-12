@@ -98,6 +98,40 @@ async def test_live_standard_and_fifo_smoke(tmp_path) -> None:
 
 @pytest.mark.live
 @pytest.mark.asyncio
+async def test_live_list_queues_returns_sorted_unique_names_for_prefix() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    prefix = f"simpleq-live-list-{uuid4().hex[:8]}-"
+    queue_a_name = f"{prefix}zeta"
+    queue_b_name = f"{prefix}alpha"
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
+    queue_a = simpleq.queue(queue_a_name)
+    queue_b = simpleq.queue(queue_b_name)
+
+    try:
+        await queue_a.ensure_exists()
+        await queue_b.ensure_exists()
+
+        queue_names = await simpleq.list_queues(prefix)
+
+        assert queue_names == sorted(set(queue_names))
+        assert queue_a_name in queue_names
+        assert queue_b_name in queue_names
+    finally:
+        await queue_a.delete()
+        await queue_b.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
 async def test_live_existing_queue_attributes_and_tags_are_reconciled() -> None:
     _load_dotenv(Path(".env"))
     required = [

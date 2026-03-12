@@ -272,7 +272,8 @@ class SimpleQ:
     async def list_queues(self, prefix: str | None = None) -> list[str]:
         """List SQS queue names, optionally filtered by prefix."""
         urls = await self.transport.list_queues(prefix)
-        return [url.rsplit("/", 1)[-1] for url in urls]
+        names = [url.rsplit("/", 1)[-1] for url in urls]
+        return sorted(dict.fromkeys(names))
 
     def list_queues_sync(self, prefix: str | None = None) -> list[str]:
         """Synchronous wrapper for :meth:`list_queues`."""

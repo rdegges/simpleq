@@ -404,6 +404,23 @@ async def test_queue_delete_recovers_from_stale_queue_url() -> None:
 
 
 @pytest.mark.asyncio
+async def test_queue_delete_rejects_non_string_queue_url_from_transport() -> None:
+    class InvalidQueueUrlTransport(FakeTransport):
+        async def get_queue_url(self, queue_name: str) -> str | None:
+            return 123  # type: ignore[return-value]
+
+    simpleq = SimpleQ()
+    simpleq.transport = InvalidQueueUrlTransport()
+    queue = simpleq.queue("emails", wait_seconds=0)
+
+    with pytest.raises(
+        QueueValidationError,
+        match="transport.get_queue_url must return a string or None",
+    ):
+        await queue.delete()
+
+
+@pytest.mark.asyncio
 async def test_queue_stats_recovers_from_stale_queue_url() -> None:
     class FlakyStatsTransport(FakeTransport):
         def __init__(self) -> None:

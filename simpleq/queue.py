@@ -788,7 +788,12 @@ class Queue:
             return cached_url
         get_queue_url = getattr(self.simpleq.transport, "get_queue_url", None)
         if callable(get_queue_url):
-            return await get_queue_url(queue_name)
+            resolved_url = await get_queue_url(queue_name)
+            if resolved_url is None or isinstance(resolved_url, str):
+                return resolved_url
+            raise QueueValidationError(
+                "transport.get_queue_url must return a string or None."
+            )
         if queue_name == self.name:
             return await self.ensure_exists()
         return None
