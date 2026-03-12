@@ -128,8 +128,14 @@ class FakeBotoSQSClient:
             return dict(self.list_queue_pages.get(page_key, {}))
         return {"QueueUrls": ["https://example.com/emails"]}
 
-    def list_queue_tags(self, *, QueueUrl: str) -> dict[str, dict[str, str]]:
+    def list_queue_tags(self, *, QueueUrl: str) -> dict[str, Any]:
         self.calls.append(("list_queue_tags", {"QueueUrl": QueueUrl}))
+        if QueueUrl.endswith("/missing-tags"):
+            return {}
+        if QueueUrl.endswith("/none-tags"):
+            return {"Tags": None}
+        if QueueUrl.endswith("/bad-tags"):
+            return {"Tags": ["not", "a", "mapping"]}
         return {"Tags": dict(self.tags_by_url.get(QueueUrl, {}))}
 
     def tag_queue(self, *, QueueUrl: str, Tags: dict[str, str]) -> dict[str, Any]:
@@ -466,6 +472,24 @@ async def test_get_queue_attributes_with_non_mapping_raises_queue_error(
             "https://example.com/bad-attributes",
             ["QueueArn"],
         )
+
+
+@pytest.mark.asyncio
+async def test_list_queue_tags_with_missing_tags_returns_empty_mapping(
+    transport: SQSClient,
+) -> None:
+    assert await transport.list_queue_tags("jobs", "https://example.com/missing-tags") == {}
+
+
+@pytest.mark.asyncio
+async def test_list_queue_tags_with_non_mapping_tags_raises_queue_error(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="Tags"):
+        await transport.list_queue_tags("jobs", "https://example.com/none-tags")
+
+    with pytest.raises(QueueError, match="Tags"):
+        await transport.list_queue_tags("jobs", "https://example.com/bad-tags")
 
 
 @pytest.mark.asyncio

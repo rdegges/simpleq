@@ -218,7 +218,13 @@ class SQSClient:
             "list_queue_tags",
             QueueUrl=queue_url,
         )
-        return dict(response.get("Tags", {}))
+        raw_tags = response.get("Tags", {})
+        if not isinstance(raw_tags, Mapping):
+            raise QueueError(
+                f"list_queue_tags for queue '{queue_name}' returned invalid response: "
+                "missing mapping 'Tags'."
+            )
+        return {str(key): str(value) for key, value in raw_tags.items()}
 
     async def tag_queue(
         self,
