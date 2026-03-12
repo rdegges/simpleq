@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import os
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import boto3
 from botocore.exceptions import ClientError
 
-from simpleq.exceptions import QueueBatchError, QueueNotFoundError
+from simpleq.exceptions import QueueBatchError, QueueError, QueueNotFoundError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -95,7 +96,12 @@ class SQSClient:
                 return None
             raise
 
-        url = str(response["QueueUrl"])
+        url = response_non_empty_string(
+            response,
+            "QueueUrl",
+            queue_name=queue_name,
+            operation="get_queue_url",
+        )
         self._queue_urls[queue_name] = url
         return url
 
@@ -115,7 +121,12 @@ class SQSClient:
             Attributes=attributes or {},
             tags=tags or {},
         )
-        url = str(response["QueueUrl"])
+        url = response_non_empty_string(
+            response,
+            "QueueUrl",
+            queue_name=queue_name,
+            operation="create_queue",
+        )
         self._queue_urls[queue_name] = url
         return url
 
@@ -158,7 +169,13 @@ class SQSClient:
             QueueUrl=queue_url,
             AttributeNames=attribute_names,
         )
-        return dict(response["Attributes"])
+        attributes = response_mapping(
+            response,
+            "Attributes",
+            queue_name=queue_name,
+            operation="get_queue_attributes",
+        )
+        return {str(key): str(value) for key, value in attributes.items()}
 
     async def list_queues(self, prefix: str | None = None) -> list[str]:
         """List queue URLs, optionally by prefix."""
@@ -304,7 +321,12 @@ class SQSClient:
             "send_message",
             **kwargs,
         )
-        return str(response["MessageId"])
+        return response_non_empty_string(
+            response,
+            "MessageId",
+            queue_name=queue_name,
+            operation="send_message",
+        )
 
     async def send_message_batch(
         self,
@@ -409,7 +431,13 @@ class SQSClient:
         attributes = await self.get_queue_attributes(
             queue_name, queue_url, ["QueueArn"]
         )
-        return str(attributes["QueueArn"])
+        queue_arn = attributes.get("QueueArn")
+        if not isinstance(queue_arn, str) or not queue_arn.strip():
+            raise QueueError(
+                f"queue_arn for queue '{queue_name}' returned invalid response: "
+                "missing non-empty 'QueueArn' attribute."
+            )
+        return queue_arn
 
     async def require_queue_url(self, queue_name: str) -> str:
         """Return a queue URL or raise if it does not exist."""
@@ -455,3 +483,37 @@ def client_error_code(exc: ClientError) -> str | None:
     if not normalized:
         return None
     return normalized
+
+
+def response_non_empty_string(
+    response: Mapping[str, Any],
+    key: str,
+    *,
+    queue_name: str,
+    operation: str,
+) -> str:
+    """Extract a required non-empty string field from an AWS response payload."""
+    value = response.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise QueueError(
+            f"{operation} for queue '{queue_name}' returned invalid response: "
+            f"missing non-empty '{key}'."
+        )
+    return value
+
+
+def response_mapping(
+    response: Mapping[str, Any],
+    key: str,
+    *,
+    queue_name: str,
+    operation: str,
+) -> Mapping[str, Any]:
+    """Extract a required mapping field from an AWS response payload."""
+    value = response.get(key)
+    if not isinstance(value, Mapping):
+        raise QueueError(
+            f"{operation} for queue '{queue_name}' returned invalid response: "
+            f"missing mapping '{key}'."
+        )
+    return value

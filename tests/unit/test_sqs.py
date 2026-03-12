@@ -8,7 +8,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from simpleq.config import SimpleQConfig
-from simpleq.exceptions import QueueBatchError, QueueNotFoundError
+from simpleq.exceptions import QueueBatchError, QueueError, QueueNotFoundError
 from simpleq.observability import CostTracker, OperationName
 from simpleq.sqs import SQSClient, uses_local_credentials
 
@@ -61,6 +61,8 @@ class FakeBotoSQSClient:
             raise ClientError({"Error": {"Code": "AccessDenied"}}, "GetQueueUrl")
         if QueueName == "malformed":
             raise ClientError({}, "GetQueueUrl")
+        if QueueName == "missing-url":
+            return {}
         return {"QueueUrl": f"https://example.com/{QueueName}"}
 
     def create_queue(
@@ -82,13 +84,19 @@ class FakeBotoSQSClient:
 
     def get_queue_attributes(
         self, *, QueueUrl: str, AttributeNames: list[str]
-    ) -> dict[str, dict[str, str]]:
+    ) -> dict[str, Any]:
         self.calls.append(
             (
                 "get_queue_attributes",
                 {"QueueUrl": QueueUrl, "AttributeNames": AttributeNames},
             )
         )
+        if QueueUrl.endswith("/missing-attributes"):
+            return {}
+        if QueueUrl.endswith("/bad-attributes"):
+            return {"Attributes": "not-a-dict"}
+        if QueueUrl.endswith("/missing-arn"):
+            return {"Attributes": {"ApproximateNumberOfMessages": "3"}}
         return {
             "Attributes": {
                 "QueueArn": "arn:aws:sqs:us-east-1:123:test",
@@ -147,6 +155,8 @@ class FakeBotoSQSClient:
 
     def send_message(self, **kwargs: Any) -> dict[str, str]:
         self.calls.append(("send_message", kwargs))
+        if kwargs.get("QueueUrl", "").endswith("/missing-message-id"):
+            return {}
         return {"MessageId": "mid-1"}
 
     def send_message_batch(self, **kwargs: Any) -> dict[str, list[dict[str, str]]]:
@@ -196,6 +206,14 @@ async def test_get_queue_url_with_malformed_client_error_re_raises_client_error(
 ) -> None:
     with pytest.raises(ClientError):
         await transport.get_queue_url("malformed")
+
+
+@pytest.mark.asyncio
+async def test_get_queue_url_with_missing_queue_url_raises_queue_error(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="QueueUrl"):
+        await transport.get_queue_url("missing-url")
 
 
 @pytest.mark.asyncio
@@ -412,6 +430,50 @@ async def test_send_message_batch_raises_on_partial_failure(
                 {"Id": "2", "MessageBody": "{bad-json"},
             ],
         )
+
+
+@pytest.mark.asyncio
+async def test_send_message_with_missing_message_id_raises_queue_error(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="MessageId"):
+        await transport.send_message(
+            "jobs",
+            "https://example.com/missing-message-id",
+            message_body="{}",
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_queue_attributes_with_missing_attributes_raises_queue_error(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="Attributes"):
+        await transport.get_queue_attributes(
+            "jobs",
+            "https://example.com/missing-attributes",
+            ["QueueArn"],
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_queue_attributes_with_non_mapping_raises_queue_error(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="Attributes"):
+        await transport.get_queue_attributes(
+            "jobs",
+            "https://example.com/bad-attributes",
+            ["QueueArn"],
+        )
+
+
+@pytest.mark.asyncio
+async def test_queue_arn_with_missing_queue_arn_raises_queue_error(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="QueueArn"):
+        await transport.queue_arn("jobs", "https://example.com/missing-arn")
 
 
 @pytest.mark.asyncio
