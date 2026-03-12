@@ -139,6 +139,28 @@ def test_from_overrides_uses_simpleq_region_env(
     assert config.region == "eu-central-1"
 
 
+def test_from_overrides_normalizes_explicit_region_whitespace() -> None:
+    config = SimpleQConfig.from_overrides(region="  eu-west-1  ")
+
+    assert config.region == "eu-west-1"
+
+
+def test_from_overrides_ignores_blank_region_env_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_REGION", "   ")
+    monkeypatch.setenv("AWS_REGION", "us-west-1")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.region == "us-west-1"
+
+
+def test_from_overrides_rejects_empty_explicit_region() -> None:
+    with pytest.raises(ValueError, match="region must be non-empty"):
+        SimpleQConfig.from_overrides(region="   ")
+
+
 def test_from_overrides_prefers_simpleq_region_over_aws_region_envs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

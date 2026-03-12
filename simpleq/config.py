@@ -99,6 +99,24 @@ def _normalize_endpoint_url(value: str | None) -> str | None:
     return normalized
 
 
+def _resolve_region(*, explicit: str | None, default: str) -> str:
+    if explicit is not None:
+        normalized_explicit = explicit.strip()
+        if not normalized_explicit:
+            raise ValueError("region must be non-empty.")
+        return normalized_explicit
+
+    for env_name in ("SIMPLEQ_REGION", "AWS_REGION", "AWS_DEFAULT_REGION"):
+        value = os.getenv(env_name)
+        if value is None:
+            continue
+        normalized = value.strip()
+        if normalized:
+            return normalized
+
+    return default
+
+
 def _localstack_endpoint_from_hostname(hostname: str) -> str:
     normalized = hostname.strip()
     parsed = urlparse(normalized)
@@ -211,13 +229,7 @@ class SimpleQConfig:
         """Resolve configuration using explicit values, then env vars, then defaults."""
         config = cls()
 
-        config.region = (
-            region
-            or os.getenv("SIMPLEQ_REGION")
-            or os.getenv("AWS_REGION")
-            or os.getenv("AWS_DEFAULT_REGION")
-            or config.region
-        )
+        config.region = _resolve_region(explicit=region, default=config.region)
         config.endpoint_url = (
             _normalize_endpoint_url(endpoint_url)
             or resolve_endpoint_url_from_env()
@@ -290,6 +302,9 @@ class SimpleQConfig:
 
 def validate_config(config: SimpleQConfig) -> None:
     """Validate resolved configuration values."""
+    if not config.region.strip():
+        raise ValueError("region must be non-empty.")
+    config.region = config.region.strip()
     _validate_int_range(
         name="batch_size", value=config.batch_size, minimum=1, maximum=10
     )
