@@ -8,7 +8,6 @@ from typing import (
     Literal,
     ParamSpec,
     TypeVar,
-    cast,
 )
 
 from simpleq._sync import run_sync
@@ -213,7 +212,10 @@ class SimpleQ:
                     f"Queue name '{queue_ref}' is ambiguous. Reuse the Queue instance instead."
                 )
             return self.queue(queue_ref, fifo=queue_ref.endswith(".fifo"))
-        return cast("Queue", queue_ref)
+        raise QueueValidationError(
+            "queue must be a Queue instance, queue name string, or None; "
+            f"got {type(queue_ref).__name__}."
+        )
 
     def task(
         self,

@@ -49,8 +49,15 @@ def test_simpleq_queue_cache_and_resolution(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(simpleq.transport, "list_queues", fake_list)
     assert simpleq.list_queues_sync("mail") == ["emails"]
     assert simpleq.run_sync(asyncio.sleep(0, result="ok")) == "ok"
-    marker = object()
-    assert simpleq.resolve_queue(marker) is marker
+    with pytest.raises(QueueValidationError, match="queue must be a Queue instance"):
+        simpleq.resolve_queue(object())
+
+
+def test_simpleq_resolve_queue_rejects_invalid_reference_type() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+
+    with pytest.raises(QueueValidationError, match="int"):
+        simpleq.resolve_queue(123)
 
 
 def test_simpleq_resolve_queue_none_supports_fifo_default_queue() -> None:
