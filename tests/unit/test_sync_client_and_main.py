@@ -276,6 +276,7 @@ async def test_simpleq_list_queues_ignores_malformed_queue_urls(
         ),
         ("arn:aws:sqs:us-east-1:123456789012:emails", "emails"),
         ("arn:aws-us-gov:sqs:us-gov-west-1:123456789012:orders.fifo", "orders.fifo"),
+        ("arn:aws:sqs:us-east-1:123456789012", None),
         ("simpleq-plain-name", "simpleq-plain-name"),
         ("https://sqs.aws/123/invalid name", None),
         ("arn:aws:s3:us-east-1:123456789012:emails", None),
@@ -299,6 +300,39 @@ def test_resolve_queue_accepts_sqs_arn_reference() -> None:
 
     assert resolved.name == "emails"
     assert resolved.fifo is False
+
+
+def test_resolve_queue_rejects_invalid_sqs_arn_reference() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+
+    with pytest.raises(
+        QueueValidationError,
+        match="must be a valid queue name, queue URL, or SQS queue ARN",
+    ):
+        simpleq.resolve_queue("arn:aws:sqs:us-east-1:123456789012:")
+
+
+def test_resolve_queue_rejects_invalid_queue_url_reference() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+
+    with pytest.raises(
+        QueueValidationError,
+        match="must be a valid queue name, queue URL, or SQS queue ARN",
+    ):
+        simpleq.resolve_queue("https://sqs.us-east-1.amazonaws.com/123/not valid")
+
+
+def test_resolve_queue_raises_for_ambiguous_string_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+    queue_a = simpleq.queue("emails")
+    queue_b = simpleq.queue("notifications")
+
+    monkeypatch.setattr(simpleq, "_configured_queues", lambda _name: [queue_a, queue_b])
+
+    with pytest.raises(QueueValidationError, match="is ambiguous"):
+        simpleq.resolve_queue("emails")
 
 
 def test_module_entrypoint_invokes_cli_main(monkeypatch: pytest.MonkeyPatch) -> None:

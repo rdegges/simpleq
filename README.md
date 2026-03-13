@@ -128,6 +128,8 @@ with a different definition now fails fast with `InvalidTaskError` so workers
 do not silently execute unexpected callables.
 String queue references used by `sq.task(queue=...)`, `sq.worker(queues=[...])`,
 and `sq.resolve_queue(...)` can be a queue name, queue URL, or SQS queue ARN.
+Malformed URL/ARN references fail fast with `QueueValidationError` so they do
+not silently fall back to queue-name parsing.
 When a queue already exists in AWS, SimpleQ reconciles its SQS attributes and
 any explicitly configured tags to match that definition.
 

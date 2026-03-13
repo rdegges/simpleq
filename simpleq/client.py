@@ -205,8 +205,14 @@ class SimpleQ:
                 return queue_ref
             return self._clone_queue(queue_ref)
         if isinstance(queue_ref, str):
-            normalized_ref = queue_name_from_reference(queue_ref)
-            queue_name = normalized_ref if normalized_ref is not None else queue_ref
+            normalized = queue_ref.strip()
+            normalized_ref = queue_name_from_reference(normalized)
+            if normalized_ref is None and _looks_like_queue_reference(normalized):
+                raise QueueValidationError(
+                    "queue string references must be a valid queue name, queue URL, "
+                    "or SQS queue ARN."
+                )
+            queue_name = normalized_ref if normalized_ref is not None else normalized
             matches = self._configured_queues(queue_name)
             if len(matches) == 1:
                 return matches[0]
@@ -314,6 +320,11 @@ def queue_name_from_reference(reference: str) -> str | None:
         return None
     queue_name = unquote(path.rsplit("/", 1)[-1])
     return _validated_queue_name(queue_name)
+
+
+def _looks_like_queue_reference(reference: str) -> bool:
+    """Return whether ``reference`` appears to be a queue URL or ARN."""
+    return reference.startswith("arn:") or "://" in reference
 
 
 def _validated_queue_name(candidate: str) -> str | None:
