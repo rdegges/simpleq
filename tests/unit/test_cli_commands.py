@@ -179,21 +179,21 @@ def test_worker_start_and_queue_commands(
         "simpleq.cli.import_modules", lambda modules, reload=False: modules
     )
 
-    with pytest.raises(typer.BadParameter):
-        worker_start(queues=[], imports=[], concurrency=7, burst=False)
+    worker_start(queues=[], imports=[], concurrency=7, burst=False)
+    assert client.worker_calls[0]["queues"] == [client.config.default_queue_name]
 
     worker_start(
         queues=["emails"], imports=["tests.fixtures.tasks"], concurrency=7, burst=True
     )
-    assert client.worker_instance.calls == [True]
-    assert client.worker_calls[0]["concurrency"] == 7
+    assert client.worker_instance.calls == [False, True]
+    assert client.worker_calls[1]["concurrency"] == 7
 
     worker_start(
         queues=["emails"],
         imports=["tests.fixtures.tasks"],
         burst=True,
     )
-    assert client.worker_calls[1]["concurrency"] is None
+    assert client.worker_calls[2]["concurrency"] is None
 
     reload_calls: dict[str, object] = {}
     monkeypatch.setattr(
@@ -218,6 +218,32 @@ def test_worker_start_and_queue_commands(
     assert client.queue_instance.ensure_called is True
     assert client.queue_instance.deleted is True
     assert client.queue_instance.purged is True
+
+
+def test_worker_start_reload_uses_default_queue_when_not_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FakeClient()
+    monkeypatch.setattr("simpleq.cli.make_client", lambda **_: client)
+    monkeypatch.setattr(
+        "simpleq.cli.import_modules", lambda modules, reload=False: modules
+    )
+
+    reload_calls: dict[str, object] = {}
+    monkeypatch.setattr(
+        "simpleq.cli.run_reloading_worker",
+        lambda **kwargs: reload_calls.update(kwargs),
+    )
+
+    worker_start(
+        queues=[],
+        imports=["tests.fixtures.tasks"],
+        concurrency=2,
+        burst=False,
+        reload=True,
+    )
+
+    assert reload_calls["queues"] == [client.config.default_queue_name]
 
 
 def test_dlq_cost_metrics_and_dashboard_commands(

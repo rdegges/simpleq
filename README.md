@@ -160,6 +160,9 @@ simpleq job enqueue myapp.tasks:send_email --import-module myapp.tasks --payload
 simpleq worker start -q emails --import-module myapp.tasks --reload
 ```
 
+If you omit `--queue`, `worker start` now defaults to `SIMPLEQ_DEFAULT_QUEUE`
+(or `default_queue_name`, which defaults to `default`).
+
 When you pass `--import-module`, SimpleQ reuses the queue configuration declared by those tasks. A worker started with `-q emails` will pick up the imported queue's FIFO, DLQ, visibility timeout, and wait settings when there is a single configured match.
 
 ## How It Compares

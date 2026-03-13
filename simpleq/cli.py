@@ -337,13 +337,14 @@ def worker_start(
     region: Annotated[str | None, typer.Option("--region")] = None,
 ) -> None:
     """Start a SimpleQ worker."""
-    queues = queues or []
+    queue_names = list(queues or [])
     imports = imports or []
-    if not queues:
-        raise typer.BadParameter("At least one --queue is required.")
+    simpleq = make_client(endpoint_url=endpoint_url, region=region)
+    if not queue_names:
+        queue_names = [simpleq.config.default_queue_name]
     if reload:
         run_reloading_worker(
-            queues=queues,
+            queues=queue_names,
             imports=imports,
             concurrency=concurrency,
             burst=burst,
@@ -351,9 +352,8 @@ def worker_start(
             region=region,
         )
         return
-    simpleq = make_client(endpoint_url=endpoint_url, region=region)
     load_registered_tasks(simpleq, imports)
-    worker = simpleq.worker(queues=queues, concurrency=concurrency)
+    worker = simpleq.worker(queues=queue_names, concurrency=concurrency)
     worker.work_sync(burst=burst)
 
 
