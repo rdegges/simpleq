@@ -35,3 +35,15 @@ Fix it with one of:
 ## Integration tests fail on the host but pass in Docker
 
 Confirm that LocalStack is reachable on `http://localhost:4566`. The test suite uses that endpoint automatically on the host.
+
+## `QueueError` mentions an invalid `receive_message` response
+
+SimpleQ validates SQS `receive_message` payloads and expects `Messages` to be a
+list of message objects. This usually points to a proxy, mock, or LocalStack
+version returning malformed payloads.
+
+Fix it with one of:
+
+- upgrade LocalStack to the latest stable release
+- disable or correct any custom SQS proxy/middleware that rewrites responses
+- verify your test double returns `{"Messages": [ ... ]}` with mapping entries

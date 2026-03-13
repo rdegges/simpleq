@@ -404,7 +404,19 @@ class SQSClient:
             "receive_message",
             **kwargs,
         )
-        return list(response.get("Messages", []))
+        raw_messages = response.get("Messages", [])
+        if not isinstance(raw_messages, list):
+            raise QueueError(
+                f"receive_message for queue '{queue_name}' returned invalid response: "
+                "expected 'Messages' to be a list."
+            )
+        for item in raw_messages:
+            if not isinstance(item, Mapping):
+                raise QueueError(
+                    f"receive_message for queue '{queue_name}' returned invalid response: "
+                    "expected each entry in 'Messages' to be a mapping."
+                )
+        return [dict(item) for item in raw_messages]
 
     async def delete_message(
         self, queue_name: str, queue_url: str, receipt_handle: str

@@ -174,6 +174,13 @@ class FakeBotoSQSClient:
 
     def receive_message(self, **kwargs: Any) -> dict[str, list[dict[str, str]]]:
         self.calls.append(("receive_message", kwargs))
+        queue_url = str(kwargs.get("QueueUrl", ""))
+        if queue_url.endswith("/missing-messages"):
+            return {}
+        if queue_url.endswith("/bad-messages-type"):
+            return {"Messages": "not-a-list"}  # type: ignore[return-value]
+        if queue_url.endswith("/bad-message-item"):
+            return {"Messages": [{"Body": "{}"}, "invalid"]}  # type: ignore[list-item]
         return {"Messages": [{"Body": "{}", "MessageId": "1"}]}
 
     def delete_message(self, **kwargs: Any) -> dict[str, Any]:
@@ -525,6 +532,49 @@ async def test_queue_arn_with_missing_queue_arn_raises_queue_error(
 ) -> None:
     with pytest.raises(QueueError, match="QueueArn"):
         await transport.queue_arn("jobs", "https://example.com/missing-arn")
+
+
+@pytest.mark.asyncio
+async def test_receive_messages_with_missing_messages_returns_empty_list(
+    transport: SQSClient,
+) -> None:
+    messages = await transport.receive_messages(
+        "jobs",
+        "https://example.com/missing-messages",
+        max_messages=1,
+        wait_seconds=0,
+        visibility_timeout=None,
+    )
+
+    assert messages == []
+
+
+@pytest.mark.asyncio
+async def test_receive_messages_with_non_list_messages_raises_queue_error(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="Messages"):
+        await transport.receive_messages(
+            "jobs",
+            "https://example.com/bad-messages-type",
+            max_messages=1,
+            wait_seconds=0,
+            visibility_timeout=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_receive_messages_with_non_mapping_item_raises_queue_error(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="Messages"):
+        await transport.receive_messages(
+            "jobs",
+            "https://example.com/bad-message-item",
+            max_messages=1,
+            wait_seconds=0,
+            visibility_timeout=None,
+        )
 
 
 @pytest.mark.asyncio
