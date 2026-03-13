@@ -819,8 +819,6 @@ class Queue:
             raise QueueValidationError(
                 "transport.get_queue_url must return a string or None."
             )
-        if queue_name == self.name:
-            return await self.ensure_exists()
         return None
 
     async def _delete_queue_with_stale_recovery(

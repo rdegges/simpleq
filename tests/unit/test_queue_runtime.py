@@ -404,6 +404,21 @@ async def test_queue_delete_recovers_from_stale_queue_url() -> None:
 
 
 @pytest.mark.asyncio
+async def test_queue_delete_does_not_create_queue_when_transport_cannot_resolve_url() -> (
+    None
+):
+    simpleq = SimpleQ()
+    transport = FakeTransport()
+    simpleq.transport = transport
+    queue = simpleq.queue("emails", wait_seconds=0)
+
+    await queue.delete()
+
+    assert transport.ensured == []
+    assert transport.deleted == []
+
+
+@pytest.mark.asyncio
 async def test_queue_delete_rejects_non_string_queue_url_from_transport() -> None:
     class InvalidQueueUrlTransport(FakeTransport):
         async def get_queue_url(self, queue_name: str) -> str | None:
@@ -552,6 +567,59 @@ async def test_queue_receive_skips_and_deletes_malformed_messages(
         ).jobs_decode_failed
         == 1
     )
+
+
+@pytest.mark.asyncio
+async def test_queue_receive_skips_malformed_messages_without_receipt_handle() -> None:
+    simpleq = SimpleQ()
+    simpleq.transport = FakeTransport()
+    queue = simpleq.queue("emails", wait_seconds=0)
+    simpleq.transport.receive_queue = [
+        [
+            {
+                "Body": "{not-json",
+                "MessageId": "mid-bad",
+                "Attributes": {"ApproximateReceiveCount": "1"},
+                "MessageAttributes": {},
+            }
+        ]
+    ]
+
+    received = await queue.receive(max_messages=1, wait_seconds=0)
+
+    assert received == []
+    assert simpleq.transport.deleted_messages == []
+    assert simpleq.cost_tracker.metrics_for("emails").jobs_decode_failed == 1
+
+
+@pytest.mark.asyncio
+async def test_queue_receive_logs_when_deleting_malformed_message_fails() -> None:
+    class DeleteFailsTransport(FakeTransport):
+        async def delete_message(
+            self, queue_name: str, queue_url: str, receipt_handle: str
+        ) -> None:
+            del queue_name, queue_url, receipt_handle
+            raise RuntimeError("delete failed")
+
+    simpleq = SimpleQ()
+    simpleq.transport = DeleteFailsTransport()
+    queue = simpleq.queue("emails", wait_seconds=0)
+    simpleq.transport.receive_queue = [
+        [
+            {
+                "Body": "{not-json",
+                "ReceiptHandle": "receipt-bad",
+                "MessageId": "mid-bad",
+                "Attributes": {"ApproximateReceiveCount": "1"},
+                "MessageAttributes": {},
+            }
+        ]
+    ]
+
+    received = await queue.receive(max_messages=1, wait_seconds=0)
+
+    assert received == []
+    assert simpleq.cost_tracker.metrics_for("emails").jobs_decode_failed == 1
 
 
 @pytest.mark.asyncio
