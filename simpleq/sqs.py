@@ -383,6 +383,7 @@ class SQSClient:
         max_messages: int,
         wait_seconds: int,
         visibility_timeout: int | None,
+        receive_request_attempt_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Receive up to ``max_messages`` from an SQS queue."""
         kwargs: dict[str, Any] = {
@@ -394,6 +395,8 @@ class SQSClient:
         }
         if visibility_timeout is not None:
             kwargs["VisibilityTimeout"] = visibility_timeout
+        if receive_request_attempt_id is not None:
+            kwargs["ReceiveRequestAttemptId"] = receive_request_attempt_id
 
         response = await self._call(
             queue_name,

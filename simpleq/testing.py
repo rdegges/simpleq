@@ -229,8 +229,10 @@ class InMemoryTransport:
         max_messages: int,
         wait_seconds: int,
         visibility_timeout: int | None,
+        receive_request_attempt_id: str | None = None,
     ) -> list[dict[str, Any]]:
         del queue_url
+        del receive_request_attempt_id
         queue = self._require_queue(queue_name)
         timeout = self._effective_visibility_timeout(
             queue, visibility_timeout=visibility_timeout

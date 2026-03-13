@@ -26,6 +26,18 @@ Rules to remember:
 - `Job.metadata` is reconciled from the current SQS envelope on receive, so the
   routing IDs you inspect after DLQ moves or redrives match the actual message
   state in SQS
+- for idempotent FIFO receive retries, pass `receive_request_attempt_id` to
+  `queue.receive(...)` so SQS can deduplicate retry attempts
+
+Example:
+
+```python
+jobs = await orders.receive(
+    max_messages=10,
+    wait_seconds=20,
+    receive_request_attempt_id="poller-attempt-42",
+)
+```
 
 ## DLQs
 

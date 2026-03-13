@@ -32,6 +32,7 @@ _MAX_MESSAGE_ATTRIBUTE_NAME_LENGTH = 256
 _MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES = 1_048_576
 _MAX_MESSAGE_SIZE_BYTES = 1_048_576
 _MAX_FIFO_ROUTING_ID_LENGTH = 128
+_MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH = 128
 _MAX_DLQ_MAX_RECEIVE_COUNT = 1000
 _MAX_QUEUE_TAGS = 50
 _MAX_TAG_KEY_LENGTH = 128
@@ -411,8 +412,13 @@ class Queue:
         max_messages: int | None = None,
         visibility_timeout: int | None = None,
         wait_seconds: int | None = None,
+        receive_request_attempt_id: str | None = None,
     ) -> list[Job]:
-        """Receive jobs from the queue."""
+        """Receive jobs from the queue.
+
+        ``receive_request_attempt_id`` is FIFO-only and maps to SQS
+        ``ReceiveRequestAttemptId`` for idempotent receive retries.
+        """
         resolved_max_messages = (
             self.batch_size if max_messages is None else max_messages
         )
@@ -423,6 +429,7 @@ class Queue:
             max_messages=resolved_max_messages,
             wait_seconds=resolved_wait_seconds,
             visibility_timeout=visibility_timeout,
+            receive_request_attempt_id=receive_request_attempt_id,
         )
         queue_url, messages = await self._with_refreshed_queue_url(
             "receive_messages",
@@ -431,6 +438,7 @@ class Queue:
                 max_messages=resolved_max_messages,
                 wait_seconds=resolved_wait_seconds,
                 visibility_timeout=visibility_timeout,
+                receive_request_attempt_id=receive_request_attempt_id,
             ),
         )
         decoded = [
@@ -781,6 +789,7 @@ class Queue:
         max_messages: int,
         wait_seconds: int,
         visibility_timeout: int | None,
+        receive_request_attempt_id: str | None,
     ) -> tuple[str, list[dict[str, Any]]]:
         messages = await self.simpleq.transport.receive_messages(
             self.name,
@@ -788,6 +797,7 @@ class Queue:
             max_messages=max_messages,
             wait_seconds=wait_seconds,
             visibility_timeout=visibility_timeout,
+            receive_request_attempt_id=receive_request_attempt_id,
         )
         return queue_url, messages
 
@@ -898,6 +908,7 @@ class Queue:
         max_messages: int,
         wait_seconds: int,
         visibility_timeout: int | None,
+        receive_request_attempt_id: str | None = None,
     ) -> None:
         if not is_strict_int(max_messages):
             raise QueueValidationError("max_messages must be an integer.")
@@ -917,6 +928,26 @@ class Queue:
             if visibility_timeout < 0 or visibility_timeout > _MAX_VISIBILITY_TIMEOUT:
                 raise QueueValidationError(
                     f"visibility_timeout must be between 0 and {_MAX_VISIBILITY_TIMEOUT}."
+                )
+        if receive_request_attempt_id is not None:
+            if not isinstance(receive_request_attempt_id, str):
+                raise QueueValidationError(
+                    "receive_request_attempt_id must be a string."
+                )
+            if not self.fifo:
+                raise QueueValidationError(
+                    "receive_request_attempt_id is only supported for FIFO queues."
+                )
+            if not receive_request_attempt_id:
+                raise QueueValidationError(
+                    "receive_request_attempt_id must be a non-empty string."
+                )
+            if (
+                len(receive_request_attempt_id)
+                > _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH
+            ):
+                raise QueueValidationError(
+                    "receive_request_attempt_id must be 128 characters or fewer."
                 )
 
 

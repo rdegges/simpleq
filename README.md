@@ -68,6 +68,9 @@ For FIFO workflows, `Job.metadata` is reconciled with the current SQS
 `MessageGroupId` and `MessageDeduplicationId` on receive, so DLQ inspection and
 redrive tooling see the actual routing IDs in flight instead of stale serialized
 values.
+When you need idempotent FIFO receive retries after transient network failures,
+pass `receive_request_attempt_id="..."` to `queue.receive(...)` to forward SQS
+`ReceiveRequestAttemptId`.
 
 You can set `default_queue_name` (or `SIMPLEQ_DEFAULT_QUEUE`) to either a
 standard queue (for example `jobs`) or FIFO queue (for example `jobs.fifo`).

@@ -416,6 +416,36 @@ async def test_fifo_ordering(simpleq_localstack, unique_name, cleanup_queues) ->
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_fifo_receive_supports_request_attempt_id(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
+    queue = simpleq_localstack.queue(
+        unique_name("fifo-attempt") + ".fifo",
+        fifo=True,
+        content_based_deduplication=False,
+        visibility_timeout=2,
+        wait_seconds=0,
+    )
+    cleanup_queues.append(queue)
+    task = simpleq_localstack.task(
+        queue=queue,
+        message_group_id=lambda _value: "customer-1",
+        deduplication_id=lambda value: f"dedup-{value}",
+    )(tasks.record_sync)
+
+    await task.delay("attempt-aware")
+
+    received = await queue.receive(
+        max_messages=1,
+        wait_seconds=0,
+        receive_request_attempt_id="attempt-1",
+    )
+    assert [job.args[0] for job in received] == ["attempt-aware"]
+    await queue.ack(received[0])
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_fifo_receive_blocks_later_messages_in_same_group(
     simpleq_localstack, unique_name, cleanup_queues
 ) -> None:

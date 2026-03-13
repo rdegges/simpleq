@@ -127,6 +127,39 @@ def test_queue_rejects_non_integer_receive_options() -> None:
             visibility_timeout="30",  # type: ignore[arg-type]
         )
 
+    with pytest.raises(
+        QueueValidationError,
+        match="receive_request_attempt_id must be a string",
+    ):
+        queue._validate_receive_options(
+            max_messages=1,
+            wait_seconds=0,
+            visibility_timeout=None,
+            receive_request_attempt_id=1,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    ("attempt_id", "message"),
+    [
+        ("", "receive_request_attempt_id must be a non-empty string"),
+        ("x" * 129, "receive_request_attempt_id must be 128 characters or fewer"),
+    ],
+)
+def test_fifo_queue_validates_receive_request_attempt_id(
+    attempt_id: str,
+    message: str,
+) -> None:
+    queue = SimpleQ().queue("orders.fifo", fifo=True, content_based_deduplication=True)
+
+    with pytest.raises(QueueValidationError, match=message):
+        queue._validate_receive_options(
+            max_messages=1,
+            wait_seconds=0,
+            visibility_timeout=None,
+            receive_request_attempt_id=attempt_id,
+        )
+
 
 def test_queue_rejects_non_integer_limit_values() -> None:
     with pytest.raises(QueueValidationError, match="limit must be an integer"):

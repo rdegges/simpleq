@@ -281,6 +281,7 @@ async def test_transport_happy_path_methods(transport: SQSClient) -> None:
         max_messages=1,
         wait_seconds=0,
         visibility_timeout=None,
+        receive_request_attempt_id="attempt-1",
     )
     assert messages[0]["MessageId"] == "1"
     await transport.delete_message("jobs", "https://example.com/jobs", "receipt")
@@ -294,6 +295,12 @@ async def test_transport_happy_path_methods(transport: SQSClient) -> None:
     assert await transport.require_queue_url("emails") == "https://example.com/emails"
     await transport.delete_queue("jobs", "https://example.com/jobs")
     await transport.purge_queue("jobs", "https://example.com/jobs")
+    receive_call = [
+        payload
+        for method, payload in transport.client.calls
+        if method == "receive_message"
+    ][-1]
+    assert receive_call["ReceiveRequestAttemptId"] == "attempt-1"
 
 
 @pytest.mark.asyncio
