@@ -250,6 +250,26 @@ def test_numeric_env_and_explicit_float_overrides(
     assert explicit.sqs_price_per_million == 0.2
 
 
+def test_from_overrides_reads_sqs_max_pool_connections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_SQS_MAX_POOL_CONNECTIONS", "32")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.sqs_max_pool_connections == 32
+
+
+def test_from_overrides_prefers_explicit_sqs_max_pool_connections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_SQS_MAX_POOL_CONNECTIONS", "32")
+
+    config = SimpleQConfig.from_overrides(sqs_max_pool_connections=48)
+
+    assert config.sqs_max_pool_connections == 48
+
+
 def test_from_overrides_prefers_explicit_poll_interval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -338,6 +358,18 @@ def test_from_overrides_rejects_invalid_integer_env_with_context(
     monkeypatch.setenv("SIMPLEQ_CONCURRENCY", "many")
 
     with pytest.raises(ValueError, match="Invalid integer for SIMPLEQ_CONCURRENCY"):
+        SimpleQConfig.from_overrides()
+
+
+def test_from_overrides_rejects_invalid_sqs_max_pool_connections_env_with_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_SQS_MAX_POOL_CONNECTIONS", "many")
+
+    with pytest.raises(
+        ValueError,
+        match="Invalid integer for SIMPLEQ_SQS_MAX_POOL_CONNECTIONS",
+    ):
         SimpleQConfig.from_overrides()
 
 
@@ -526,6 +558,10 @@ def test_from_overrides_rejects_invalid_default_queue_name(
         (
             {"retry_jitter_min_seconds": 0},
             "retry_jitter_min_seconds must be at least 1",
+        ),
+        (
+            {"sqs_max_pool_connections": 0},
+            "sqs_max_pool_connections must be at least 1",
         ),
     ],
 )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from botocore.exceptions import ClientError
@@ -281,6 +281,34 @@ async def test_get_queue_url_tracks_get_queue_url_operation() -> None:
     assert tracker.calls == [("emails", "get_queue_url", 1)]
 
 
+def test_client_uses_configured_sqs_max_pool_connections() -> None:
+    captured_kwargs: dict[str, Any] = {}
+
+    class StubClient:
+        pass
+
+    class StubSession:
+        def client(self, service_name: str, **kwargs: object) -> StubClient:
+            assert service_name == "sqs"
+            captured_kwargs.update(kwargs)
+            return StubClient()
+
+    transport = SQSClient(
+        SimpleQConfig.from_overrides(
+            endpoint_url="http://localhost:4566",
+            sqs_max_pool_connections=37,
+        ),
+        CostTracker(),
+        session_factory=StubSession,
+    )
+
+    _ = transport.client
+
+    config = captured_kwargs.get("config")
+    assert config is not None
+    assert cast("Any", config).max_pool_connections == 37
+
+
 @pytest.mark.asyncio
 async def test_send_message_batch_tracks_send_message_batch_operation() -> None:
     fake = FakeBotoSQSClient()
@@ -513,9 +541,7 @@ async def test_ensure_queue_recovers_from_stale_cached_url_during_tag_reconcile(
 
     assert url == "https://example.com/emails"
     assert transport._queue_urls["emails"] == "https://example.com/emails"
-    assert transport.client.tags_by_url["https://example.com/emails"] == {
-        "env": "prod"
-    }
+    assert transport.client.tags_by_url["https://example.com/emails"] == {"env": "prod"}
     assert ("get_queue_url", {"QueueName": "emails"}) in transport.client.calls
 
 

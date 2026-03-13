@@ -41,8 +41,8 @@ Boolean environment flags are strict. Use `1/0`, `true/false`, `yes/no`, or
 
 Numeric queue/runtime settings are validated eagerly against SQS limits:
 `batch_size`/`max_messages` `1-10`, `wait_seconds` `0-20`,
-`visibility_timeout` `0-43200`, `concurrency >= 1`, and
-`retry_jitter_min_seconds >= 1`.
+`visibility_timeout` `0-43200`, `concurrency >= 1`,
+`retry_jitter_min_seconds >= 1`, and `sqs_max_pool_connections >= 1`.
 Task retry options are also validated at registration time:
 `max_retries` must be `>= 0`, and every `retry_exceptions` entry must be an
 exception class.
@@ -127,6 +127,9 @@ without changing application code.
 Set `SIMPLEQ_RECEIVE_TIMEOUT_SECONDS` to configure the default
 `receive_timeout_seconds` for all workers in a deployment, while still allowing
 per-worker overrides.
+Set `SIMPLEQ_SQS_MAX_POOL_CONNECTIONS` (or `sqs_max_pool_connections=...`) to
+increase the underlying boto3 SQS HTTP connection pool when running
+high-concurrency workers.
 
 Within a single `SimpleQ` instance, a queue name has one source of truth. If
 you call `sq.queue("emails", ...)` again later, keep the configuration aligned

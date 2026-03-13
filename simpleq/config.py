@@ -216,6 +216,7 @@ class SimpleQConfig:
     enable_tracing: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     sqs_price_per_million: float = 0.40
+    sqs_max_pool_connections: int = 10
     default_queue_name: str = "default"
 
     @classmethod
@@ -239,6 +240,7 @@ class SimpleQConfig:
         enable_tracing: bool | None = None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] | None = None,
         sqs_price_per_million: float | None = None,
+        sqs_max_pool_connections: int | None = None,
         default_queue_name: str | None = None,
     ) -> SimpleQConfig:
         """Resolve configuration using explicit values, then env vars, then defaults."""
@@ -330,14 +332,16 @@ class SimpleQConfig:
             "SIMPLEQ_SQS_PRICE_PER_MILLION",
             config.sqs_price_per_million,
         )
+        config.sqs_max_pool_connections = _coalesce_int(
+            sqs_max_pool_connections,
+            "SIMPLEQ_SQS_MAX_POOL_CONNECTIONS",
+            config.sqs_max_pool_connections,
+        )
         if default_queue_name is not None:
             config.default_queue_name = default_queue_name
         else:
             env_default_queue_name = os.getenv("SIMPLEQ_DEFAULT_QUEUE")
-            if (
-                env_default_queue_name is not None
-                and env_default_queue_name.strip()
-            ):
+            if env_default_queue_name is not None and env_default_queue_name.strip():
                 config.default_queue_name = env_default_queue_name
         validate_config(config)
         return config
@@ -388,6 +392,11 @@ def validate_config(config: SimpleQConfig) -> None:
     _validate_non_negative_float(
         name="sqs_price_per_million",
         value=config.sqs_price_per_million,
+    )
+    _validate_int_range(
+        name="sqs_max_pool_connections",
+        value=config.sqs_max_pool_connections,
+        minimum=1,
     )
     if config.endpoint_url is not None:
         _validate_endpoint_url(config.endpoint_url)

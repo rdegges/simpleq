@@ -174,10 +174,12 @@ def test_simpleq_defers_transport_creation_until_first_use(
             *,
             region_name: str | None = None,
             endpoint_url: str | None = None,
+            config: object | None = None,
         ) -> StubSQSClient:
             assert service_name == "sqs"
             assert region_name == "us-east-1"
             assert endpoint_url is None
+            assert config is not None
             return StubSQSClient()
 
     def session_factory() -> StubSession:

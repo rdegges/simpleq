@@ -14,6 +14,8 @@ Recommended settings:
 - tune `SIMPLEQ_POLL_INTERVAL` (seconds between empty polls, must be `>= 0`)
 - set `SIMPLEQ_RECEIVE_TIMEOUT_SECONDS` (seconds, must be `> 0`) to bound
   `ReceiveMessage` calls across workers
+- set `SIMPLEQ_SQS_MAX_POOL_CONNECTIONS` (must be `>= 1`) to keep boto3 SQS
+  HTTP connection pooling aligned with worker concurrency
 - set `SIMPLEQ_REGION` for explicit per-service region control
 - keep `SIMPLEQ_BATCH_SIZE` between `1` and `10`
 - keep `SIMPLEQ_WAIT_SECONDS` between `0` and `20`

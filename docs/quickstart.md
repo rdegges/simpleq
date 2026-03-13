@@ -63,6 +63,8 @@ Use `SIMPLEQ_POLL_INTERVAL` to set a global default polling interval across
 workers.
 Use `SIMPLEQ_RECEIVE_TIMEOUT_SECONDS` to set a global default receive timeout
 for workers that do not pass `receive_timeout_seconds` explicitly.
+Use `SIMPLEQ_SQS_MAX_POOL_CONNECTIONS` to tune boto3 SQS HTTP connection
+pooling for higher worker concurrency.
 
 Treat each queue name as a single definition per `SimpleQ` instance. Reuse the
 same `queue` object, or pass the same FIFO/DLQ/retry/timing settings each time

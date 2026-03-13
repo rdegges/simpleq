@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, cast
 from urllib.parse import urlparse
 
 import boto3
+from botocore.config import Config as BotoClientConfig
 from botocore.exceptions import ClientError
 
 from simpleq.exceptions import QueueBatchError, QueueError, QueueNotFoundError
@@ -52,6 +53,9 @@ class SQSClient:
                 client_kwargs: dict[str, object] = {
                     "region_name": self.config.region,
                     "endpoint_url": self.config.endpoint_url,
+                    "config": BotoClientConfig(
+                        max_pool_connections=self.config.sqs_max_pool_connections
+                    ),
                 }
                 if uses_local_credentials(self.config.endpoint_url):
                     client_kwargs["aws_access_key_id"] = os.getenv(

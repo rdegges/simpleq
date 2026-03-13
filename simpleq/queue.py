@@ -37,9 +37,7 @@ _MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES = 1_048_576
 _MAX_MESSAGE_SIZE_BYTES = 1_048_576
 _MAX_FIFO_ROUTING_ID_LENGTH = 128
 _ALLOWED_FIFO_ROUTING_ID_CHARACTERS = frozenset(
-    string.ascii_letters
-    + string.digits
-    + r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""
+    string.ascii_letters + string.digits + r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""
 )
 _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH = 128
 _MAX_DLQ_MAX_RECEIVE_COUNT = 1000

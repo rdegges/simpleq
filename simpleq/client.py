@@ -79,6 +79,7 @@ class SimpleQ:
         enable_tracing: bool | None = None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] | None = None,
         sqs_price_per_million: float | None = None,
+        sqs_max_pool_connections: int | None = None,
         default_queue_name: str | None = None,
         transport: QueueTransportProtocol | None = None,
         session_factory: Callable[[], object] | None = None,
@@ -101,6 +102,7 @@ class SimpleQ:
             enable_tracing=enable_tracing,
             log_level=log_level,
             sqs_price_per_million=sqs_price_per_million,
+            sqs_max_pool_connections=sqs_max_pool_connections,
             default_queue_name=default_queue_name,
         )
         self.cost_tracker = CostTracker(
