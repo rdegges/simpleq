@@ -265,7 +265,10 @@ class SimpleQConfig:
             config.receive_timeout_seconds = receive_timeout_seconds
         else:
             receive_timeout_seconds_env = os.getenv("SIMPLEQ_RECEIVE_TIMEOUT_SECONDS")
-            if receive_timeout_seconds_env is None:
+            if (
+                receive_timeout_seconds_env is None
+                or not receive_timeout_seconds_env.strip()
+            ):
                 config.receive_timeout_seconds = None
             else:
                 try:

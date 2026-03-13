@@ -270,6 +270,16 @@ def test_from_overrides_reads_receive_timeout_seconds(
     assert config.receive_timeout_seconds == 45.0
 
 
+def test_from_overrides_ignores_blank_receive_timeout_seconds_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_RECEIVE_TIMEOUT_SECONDS", "   ")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.receive_timeout_seconds is None
+
+
 def test_from_overrides_prefers_explicit_receive_timeout_seconds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

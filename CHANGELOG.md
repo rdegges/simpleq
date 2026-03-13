@@ -32,6 +32,9 @@ All notable changes to SimpleQ are documented in this file.
 - `SimpleQ.list_queues()` now normalizes blank prefixes and defensively
   re-filters parsed queue names client-side, preventing unrelated queues from
   leaking through non-compliant broker responses.
+- `SimpleQConfig.from_overrides()` now treats blank
+  `SIMPLEQ_RECEIVE_TIMEOUT_SECONDS` values as unset, avoiding startup failures
+  from empty environment injection.
 
 ## [2.0.0] - 2026-03-13
 
