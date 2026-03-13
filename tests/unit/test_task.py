@@ -188,7 +188,9 @@ def test_import_task_callable_rejects_missing_module() -> None:
 
 
 def test_import_task_callable_rejects_missing_attribute() -> None:
-    with pytest.raises(TaskNotRegisteredError, match="Could not resolve task attribute"):
+    with pytest.raises(
+        TaskNotRegisteredError, match="Could not resolve task attribute"
+    ):
         import_task_callable("tests.fixtures.tasks:not_a_real_task")
 
 

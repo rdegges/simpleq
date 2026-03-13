@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import random
+import typing
 from numbers import Real
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from simpleq._sync import run_sync
 from simpleq.observability import Timer
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
     from simpleq.job import Job
+    from simpleq.protocols import QueueRuntimeProtocol, WorkerAppProtocol
+    from simpleq.task import TaskDefinition
 
 
 class Worker:
@@ -23,8 +26,8 @@ class Worker:
 
     def __init__(
         self,
-        simpleq: Any,
-        queues: Sequence[Any],
+        simpleq: WorkerAppProtocol,
+        queues: Sequence[QueueRuntimeProtocol],
         *,
         concurrency: int,
         poll_interval: float = 1.0,
@@ -66,7 +69,9 @@ class Worker:
         )
         self.graceful_shutdown_timeout = float(resolved_graceful_shutdown_timeout)
         self._stopping = asyncio.Event()
-        self._in_flight_receives: set[asyncio.Task[tuple[Any, list[Job]]]] = set()
+        self._in_flight_receives: set[
+            asyncio.Task[tuple[QueueRuntimeProtocol, list[Job]]]
+        ] = set()
         self._in_flight_jobs: set[asyncio.Task[None]] = set()
 
     async def work(self, *, burst: bool = False) -> None:
@@ -110,7 +115,9 @@ class Worker:
             if not processed:
                 await asyncio.sleep(self.poll_interval)
 
-    async def _receive(self, queue: Any) -> tuple[Any, list[Job]]:
+    async def _receive(
+        self, queue: QueueRuntimeProtocol
+    ) -> tuple[QueueRuntimeProtocol, list[Job]]:
         try:
             timeout_seconds = self._receive_timeout(queue)
             visibility_timeout = self._visibility_timeout(queue)
@@ -151,7 +158,7 @@ class Worker:
             )
             return queue, []
 
-    def _receive_timeout(self, queue: Any) -> float:
+    def _receive_timeout(self, queue: QueueRuntimeProtocol) -> float:
         if self.receive_timeout_seconds is not None:
             return self.receive_timeout_seconds
         wait_seconds = max(0, int(getattr(queue, "wait_seconds", 0)))
@@ -187,7 +194,10 @@ class Worker:
         await asyncio.gather(*pending, return_exceptions=True)
 
     async def _process_job(
-        self, queue: Any, job: Job, semaphore: asyncio.Semaphore
+        self,
+        queue: QueueRuntimeProtocol,
+        job: Job,
+        semaphore: asyncio.Semaphore,
     ) -> None:
         async with semaphore:
             timer = Timer()
@@ -252,7 +262,7 @@ class Worker:
 
     async def _handle_failure_safely(
         self,
-        queue: Any,
+        queue: QueueRuntimeProtocol,
         job: Job,
         exc: BaseException,
     ) -> None:
@@ -275,7 +285,7 @@ class Worker:
                 duration_seconds=0.0,
             )
 
-    def _heartbeat(self, queue: Any, job: Job) -> asyncio.Task[None]:
+    def _heartbeat(self, queue: QueueRuntimeProtocol, job: Job) -> asyncio.Task[None]:
         async def extend() -> None:
             visibility_timeout = self._visibility_timeout(queue)
             interval = max(1, visibility_timeout // 2)
@@ -301,17 +311,26 @@ class Worker:
 
         return asyncio.create_task(extend())
 
-    def _visibility_timeout(self, queue: Any) -> int:
+    def _visibility_timeout(self, queue: QueueRuntimeProtocol) -> int:
         return max(1, int(getattr(queue, "visibility_timeout", 0)))
 
-    async def _invoke(self, _queue: Any, job: Job) -> Any:
+    async def _invoke(self, _queue: QueueRuntimeProtocol, job: Job) -> object:
         definition = self.simpleq.registry.get(job.task_name)
         args, kwargs = reconstruct_arguments(definition.schema, job.args, job.kwargs)
         if definition.is_async:
-            return await definition.func(*args, **kwargs)
+            async_func = cast(
+                "typing.Callable[..., typing.Awaitable[object]]",
+                definition.func,
+            )
+            return await async_func(*args, **kwargs)
         return await asyncio.to_thread(definition.func, *args, **kwargs)
 
-    async def _handle_failure(self, queue: Any, job: Job, exc: BaseException) -> None:
+    async def _handle_failure(
+        self,
+        queue: QueueRuntimeProtocol,
+        job: Job,
+        exc: BaseException,
+    ) -> None:
         self.simpleq.cost_tracker.job_failed(queue.name)
         definition = self._resolve_task_definition(job.task_name)
         if definition is None:
@@ -357,7 +376,7 @@ class Worker:
             duration_seconds=0.0,
         )
 
-    def _resolve_task_definition(self, task_name: str) -> Any | None:
+    def _resolve_task_definition(self, task_name: str) -> TaskDefinition | None:
         try:
             return self.simpleq.registry.get(task_name)
         except Exception as resolve_exc:
@@ -368,12 +387,12 @@ class Worker:
             )
             return None
 
-    def _should_retry(self, definition: Any, exc: BaseException) -> bool:
+    def _should_retry(self, definition: TaskDefinition, exc: BaseException) -> bool:
         if definition.retry_exceptions is None:
             return True
         return isinstance(exc, definition.retry_exceptions)
 
-    def _retry_delay(self, queue: Any, attempt: int) -> int:
+    def _retry_delay(self, queue: QueueRuntimeProtocol, attempt: int) -> int:
         strategy = self.simpleq.config.backoff_strategy
         visibility_timeout = self._visibility_timeout(queue)
         if strategy == "constant":
@@ -392,39 +411,59 @@ class Worker:
 
 def reconstruct_arguments(
     schema: type[BaseModel] | None,
-    args: Any,
-    kwargs: Any,
-) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    args: object,
+    kwargs: object,
+) -> tuple[tuple[object, ...], dict[str, object]]:
     """Rehydrate task arguments before invoking a callable."""
+    resolved_args = _coerce_args(args)
+    resolved_kwargs = _coerce_kwargs(kwargs)
     if schema is None:
-        return tuple(args), dict(kwargs)
-    if len(args) != 1 or kwargs:
+        return resolved_args, resolved_kwargs
+    if len(resolved_args) != 1 or resolved_kwargs:
         raise ValueError(
             "Schema task payloads must deserialize to a single positional argument."
         )
-    model = schema.model_validate(args[0])
+    model = schema.model_validate(resolved_args[0])
     return (model,), {}
 
 
-def effective_max_retries(queue: Any, definition: Any) -> int:
+def _coerce_args(args: object) -> tuple[object, ...]:
+    """Return deserialized task args as a tuple."""
+    if isinstance(args, tuple):
+        return args
+    if isinstance(args, list):
+        return tuple(args)
+    raise ValueError("Task args must deserialize to a sequence.")
+
+
+def _coerce_kwargs(kwargs: object) -> dict[str, object]:
+    """Return deserialized task kwargs as a plain string-keyed mapping."""
+    if not isinstance(kwargs, dict):
+        raise ValueError("Task kwargs must deserialize to an object.")
+    return {str(key): value for key, value in kwargs.items()}
+
+
+def effective_max_retries(
+    queue: QueueRuntimeProtocol, definition: TaskDefinition
+) -> int:
     """Return the effective max retries for a given job."""
     if definition.max_retries is not None:
         return int(definition.max_retries)
     return int(queue.max_retries)
 
 
-def queue_has_dlq(queue: Any) -> bool:
+def queue_has_dlq(queue: QueueRuntimeProtocol) -> bool:
     """Return whether a queue has DLQ support enabled."""
     if getattr(queue, "dlq", False):
         return True
     return getattr(queue, "dlq_name", None) is not None
 
 
-def _is_strict_int(value: Any) -> bool:
+def _is_strict_int(value: object) -> bool:
     """Return whether ``value`` is an integer but not a boolean."""
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _is_strict_real(value: Any) -> bool:
+def _is_strict_real(value: object) -> bool:
     """Return whether ``value`` is a real number but not a boolean."""
     return isinstance(value, Real) and not isinstance(value, bool)

@@ -6,7 +6,7 @@ import asyncio
 import ipaddress
 import os
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlparse
 
 import boto3
@@ -18,7 +18,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from simpleq.config import SimpleQConfig
-    from simpleq.observability import CostTracker, OperationName
+    from simpleq.observability import OperationName
+    from simpleq.protocols import CostTrackerProtocol
 
 _MISSING_QUEUE_ERROR_CODES = {
     "AWS.SimpleQueueService.NonExistentQueue",
@@ -32,23 +33,23 @@ class SQSClient:
     def __init__(
         self,
         config: SimpleQConfig,
-        cost_tracker: CostTracker,
+        cost_tracker: CostTrackerProtocol,
         *,
-        session_factory: Callable[[], Any] | None = None,
+        session_factory: Callable[[], object] | None = None,
     ) -> None:
         self.config = config
         self.cost_tracker = cost_tracker
         self._session_factory = session_factory or boto3.session.Session
-        self._client: Any | None = None
+        self._client: object | None = None
         self._queue_urls: dict[str, str] = {}
 
     @property
-    def client(self) -> Any:
+    def client(self) -> object:
         """Return the lazily-created boto3 SQS client."""
         if self._client is None:
             session_or_client = self._session_factory()
             if hasattr(session_or_client, "client"):
-                client_kwargs: dict[str, Any] = {
+                client_kwargs: dict[str, object] = {
                     "region_name": self.config.region,
                     "endpoint_url": self.config.endpoint_url,
                 }
@@ -72,10 +73,10 @@ class SQSClient:
         operation: OperationName,
         func_name: str,
         /,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
+        **kwargs: object,
+    ) -> dict[str, object]:
         self.cost_tracker.track_request(queue_name, operation)
-        func = getattr(self.client, func_name)
+        func = cast("Callable[..., dict[str, object]]", getattr(self.client, func_name))
         return await asyncio.to_thread(func, **kwargs)
 
     async def get_queue_url(self, queue_name: str) -> str | None:
@@ -184,7 +185,7 @@ class SQSClient:
         seen_tokens: set[str] = set()
 
         while True:
-            request: dict[str, Any] = {
+            request: dict[str, object] = {
                 "QueueNamePrefix": prefix or "",
                 "MaxResults": 1000,
             }
@@ -319,7 +320,7 @@ class SQSClient:
         message_attributes: dict[str, dict[str, str]] | None = None,
     ) -> str:
         """Send a single message and return the SQS message ID."""
-        kwargs: dict[str, Any] = {
+        kwargs: dict[str, object] = {
             "QueueUrl": queue_url,
             "MessageBody": message_body,
         }
@@ -349,7 +350,7 @@ class SQSClient:
         self,
         queue_name: str,
         queue_url: str,
-        entries: list[dict[str, Any]],
+        entries: list[dict[str, object]],
     ) -> list[str]:
         """Send up to 10 messages in a batch."""
         response = await self._call(
@@ -420,9 +421,9 @@ class SQSClient:
         wait_seconds: int,
         visibility_timeout: int | None,
         receive_request_attempt_id: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, object]]:
         """Receive up to ``max_messages`` from an SQS queue."""
-        kwargs: dict[str, Any] = {
+        kwargs: dict[str, object] = {
             "QueueUrl": queue_url,
             "MaxNumberOfMessages": max_messages,
             "WaitTimeSeconds": wait_seconds,
@@ -543,7 +544,7 @@ def client_error_code(exc: ClientError) -> str | None:
 
 
 def response_non_empty_string(
-    response: Mapping[str, Any],
+    response: Mapping[str, object],
     key: str,
     *,
     queue_name: str,
@@ -560,12 +561,12 @@ def response_non_empty_string(
 
 
 def response_mapping(
-    response: Mapping[str, Any],
+    response: Mapping[str, object],
     key: str,
     *,
     queue_name: str,
     operation: str,
-) -> Mapping[str, Any]:
+) -> Mapping[str, object]:
     """Extract a required mapping field from an AWS response payload."""
     value = response.get(key)
     if not isinstance(value, Mapping):
@@ -577,12 +578,12 @@ def response_mapping(
 
 
 def response_list_of_mappings(
-    response: Mapping[str, Any],
+    response: Mapping[str, object],
     key: str,
     *,
     queue_name: str,
     operation: str,
-) -> list[Mapping[str, Any]]:
+) -> list[Mapping[str, object]]:
     """Extract an optional list-of-mappings field from an AWS response payload."""
     value = response.get(key, [])
     if not isinstance(value, list):
@@ -599,7 +600,7 @@ def response_list_of_mappings(
 
 
 def response_list_of_non_empty_strings(
-    response: Mapping[str, Any],
+    response: Mapping[str, object],
     key: str,
     *,
     queue_name: str,
@@ -621,7 +622,7 @@ def response_list_of_non_empty_strings(
 
 
 def response_optional_non_empty_string(
-    response: Mapping[str, Any],
+    response: Mapping[str, object],
     key: str,
     *,
     queue_name: str,

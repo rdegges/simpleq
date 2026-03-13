@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError
 from simpleq.config import SimpleQConfig
 from simpleq.exceptions import QueueBatchError, QueueError, QueueNotFoundError
 from simpleq.observability import CostTracker, OperationName
-from simpleq.sqs import SQSClient, uses_local_credentials
+from simpleq.sqs import SQSClient, client_error_code, uses_local_credentials
 
 
 class SpyCostTracker(CostTracker):
@@ -52,9 +52,7 @@ class FakeBotoSQSClient:
                 "NextToken": "loop-token",
             },
             "bad-queue-urls-type:first": {"QueueUrls": "not-a-list"},
-            "bad-queue-urls-item:first": {
-                "QueueUrls": ["https://example.com/ok", 123]
-            },
+            "bad-queue-urls-item:first": {"QueueUrls": ["https://example.com/ok", 123]},
             "bad-next-token-type:first": {
                 "QueueUrls": ["https://example.com/ok"],
                 "NextToken": 123,
@@ -650,7 +648,10 @@ async def test_get_queue_attributes_with_non_mapping_raises_queue_error(
 async def test_list_queue_tags_with_missing_tags_returns_empty_mapping(
     transport: SQSClient,
 ) -> None:
-    assert await transport.list_queue_tags("jobs", "https://example.com/missing-tags") == {}
+    assert (
+        await transport.list_queue_tags("jobs", "https://example.com/missing-tags")
+        == {}
+    )
 
 
 @pytest.mark.asyncio
@@ -731,9 +732,7 @@ def test_uses_local_credentials() -> None:
     assert uses_local_credentials("http://host.docker.internal:4566") is True
     assert uses_local_credentials("http://[::1]:4566") is True
     assert (
-        uses_local_credentials(
-            "https://sqs.us-east-1.localhost.localstack.cloud:4566"
-        )
+        uses_local_credentials("https://sqs.us-east-1.localhost.localstack.cloud:4566")
         is True
     )
     assert (
@@ -741,3 +740,25 @@ def test_uses_local_credentials() -> None:
         is False
     )
     assert uses_local_credentials("https://sqs.us-east-1.amazonaws.com") is False
+
+
+def test_uses_local_credentials_rejects_hostless_urls() -> None:
+    assert uses_local_credentials("https:///queues/emails") is False
+
+
+def test_client_error_code_handles_missing_or_blank_payloads() -> None:
+    response_missing_exc = ClientError({"Error": {"Code": "QueueDoesNotExist"}}, "Op")
+    response_missing_exc.response = None  # type: ignore[assignment]
+    assert client_error_code(response_missing_exc) is None
+
+    malformed_error_exc = ClientError({"Error": {"Code": "QueueDoesNotExist"}}, "Op")
+    malformed_error_exc.response = {"Error": "invalid"}  # type: ignore[assignment]
+    assert client_error_code(malformed_error_exc) is None
+
+    non_string_code_exc = ClientError({"Error": {"Code": "QueueDoesNotExist"}}, "Op")
+    non_string_code_exc.response = {"Error": {"Code": 123}}  # type: ignore[assignment]
+    assert client_error_code(non_string_code_exc) is None
+
+    blank_code_exc = ClientError({"Error": {"Code": "QueueDoesNotExist"}}, "Op")
+    blank_code_exc.response = {"Error": {"Code": "   "}}  # type: ignore[assignment]
+    assert client_error_code(blank_code_exc) is None

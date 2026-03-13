@@ -52,6 +52,11 @@ def test_normalize_queue_name_rejects_fifo_base_names_longer_than_limit() -> Non
         normalize_queue_name(too_long_fifo, fifo=True)
 
 
+def test_normalize_queue_name_requires_characters_before_fifo_suffix() -> None:
+    with pytest.raises(QueueValidationError, match="before '.fifo'"):
+        normalize_queue_name(".fifo", fifo=True)
+
+
 def test_queue_derives_dlq_name() -> None:
     simpleq = SimpleQ()
     assert simpleq.queue("emails", dlq=True).dlq_name == "emails-dlq"
@@ -229,11 +234,29 @@ def test_queue_rejects_invalid_tags(tags: dict[str, str], message: str) -> None:
         SimpleQ().queue("emails", tags=tags)
 
 
+def test_queue_rejects_non_string_tag_values() -> None:
+    with pytest.raises(QueueValidationError, match="queue tag values must be strings"):
+        SimpleQ().queue("emails", tags={"owner": 1})  # type: ignore[dict-item]
+
+
 def test_queue_rejects_more_than_fifty_tags() -> None:
     tags = {f"key-{index}": "value" for index in range(51)}
 
     with pytest.raises(QueueValidationError, match="at most 50"):
         SimpleQ().queue("emails", tags=tags)
+
+
+def test_queue_parse_queue_metric_returns_zero_for_missing_value() -> None:
+    queue = SimpleQ().queue("emails")
+
+    assert queue._parse_queue_metric("emails", "ApproximateNumberOfMessages", None) == 0
+
+
+def test_dlq_queue_requires_dlq_support() -> None:
+    queue = SimpleQ().queue("emails")
+
+    with pytest.raises(QueueValidationError, match="DLQ support is not enabled"):
+        queue._dlq_queue()
 
 
 @pytest.mark.parametrize(
@@ -492,3 +515,10 @@ def test_is_missing_queue_error_accepts_transport_keyerror_shape() -> None:
 
 def test_is_missing_queue_error_rejects_generic_keyerrors() -> None:
     assert not is_missing_queue_error(KeyError("missing required field"))
+
+
+def test_is_missing_queue_error_rejects_malformed_error_payloads() -> None:
+    exc = RuntimeError("boom")
+    exc.response = {"Error": "not-a-dict"}  # type: ignore[attr-defined]
+
+    assert not is_missing_queue_error(exc)

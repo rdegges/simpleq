@@ -96,7 +96,11 @@ class CostTracker:
         return self._metrics.setdefault(queue_name, QueueCostMetrics())
 
     def track_request(
-        self, queue_name: str, operation: OperationName, *, count: int = 1
+        self,
+        queue_name: str,
+        operation: str,
+        *,
+        count: int = 1,
     ) -> None:
         """Track SQS API request usage."""
         metrics = self.metrics_for(queue_name)
@@ -202,9 +206,9 @@ class PrometheusMetrics:
         self, queue_name: str, *, strategy: str, delay_seconds: int
     ) -> None:
         """Record the retry delay selected for a failed job."""
-        self.retry_delay_seconds.labels(
-            queue=queue_name, strategy=strategy
-        ).observe(delay_seconds)
+        self.retry_delay_seconds.labels(queue=queue_name, strategy=strategy).observe(
+            delay_seconds
+        )
 
     def render(self) -> bytes:
         """Render all metrics in Prometheus exposition format."""

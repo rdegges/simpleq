@@ -165,9 +165,7 @@ def _attach_system_routing_metadata(job: Job, system_attributes: Any) -> None:
         job.metadata = metadata
 
 
-def _set_metadata_value(
-    metadata: dict[str, JSONValue], key: str, value: Any
-) -> bool:
+def _set_metadata_value(metadata: dict[str, JSONValue], key: str, value: Any) -> bool:
     """Store the latest stringified routing metadata from the SQS envelope."""
     if value is None:
         return False

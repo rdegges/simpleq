@@ -11,7 +11,7 @@ import pytest
 from simpleq import SimpleQ
 from simpleq.job import Job
 from simpleq.task import TaskDefinition, task_name_for
-from simpleq.worker import Worker, reconstruct_arguments
+from simpleq.worker import Worker, queue_has_dlq, reconstruct_arguments
 from tests.fixtures.tasks import EmailPayload, record_sync
 
 
@@ -44,6 +44,28 @@ class FakeQueue:
         self.dlq_moves.append(error)
 
 
+@dataclass
+class SpyLogger:
+    """Capture structured log events emitted by worker paths."""
+
+    calls: list[tuple[str, str, dict[str, object]]] = field(default_factory=list)
+
+    def debug(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("debug", event, dict(kwargs)))
+
+    def info(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("info", event, dict(kwargs)))
+
+    def warning(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("warning", event, dict(kwargs)))
+
+    def error(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("error", event, dict(kwargs)))
+
+    def critical(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("critical", event, dict(kwargs)))
+
+
 def test_reconstruct_arguments_for_schema() -> None:
     args, kwargs = reconstruct_arguments(
         EmailPayload,
@@ -72,7 +94,9 @@ def test_worker_rejects_invalid_runtime_options() -> None:
     ):
         Worker(simpleq, [queue], concurrency=1, receive_timeout_seconds=0)
 
-    with pytest.raises(ValueError, match="graceful_shutdown_timeout must be non-negative"):
+    with pytest.raises(
+        ValueError, match="graceful_shutdown_timeout must be non-negative"
+    ):
         Worker(simpleq, [queue], concurrency=1, graceful_shutdown_timeout=-1)
 
 
@@ -176,6 +200,18 @@ async def test_worker_handles_non_retryable_failure() -> None:
     )
     await worker._handle_failure(queue, job, RuntimeError("boom"))
     assert len(queue.acked) == 1
+    assert queue.visibility_changes == []
+    assert queue.dlq_moves == []
+    processed_samples = simpleq.metrics.jobs_processed.collect()[0].samples
+    failure_samples = [
+        sample
+        for sample in processed_samples
+        if sample.name == "simpleq_jobs_processed_total"
+        and sample.labels.get("queue") == queue.name
+        and sample.labels.get("status") == "failure"
+    ]
+    assert len(failure_samples) == 1
+    assert failure_samples[0].value == 1
 
 
 @pytest.mark.asyncio
@@ -533,6 +569,7 @@ async def test_worker_handles_unresolvable_task_without_crashing() -> None:
 @pytest.mark.asyncio
 async def test_worker_does_not_crash_when_ack_fails_after_success() -> None:
     simpleq = SimpleQ()
+    simpleq.logger = SpyLogger()
     definition = TaskDefinition(name=task_name_for(record_sync), func=record_sync)
     simpleq.registry.register(definition)
 
@@ -570,11 +607,21 @@ async def test_worker_does_not_crash_when_ack_fails_after_success() -> None:
     assert len(ack_error_samples) == 1
     assert ack_error_samples[0].value == 1
     assert not success_samples
+    assert simpleq.cost_tracker.metrics_for(queue.name).jobs_processed == 0
+    assert any(
+        level == "error"
+        and event == "queue_ack_failed"
+        and payload["queue_name"] == queue.name
+        and payload["task_name"] == definition.name
+        and payload["error"] == "ack failed"
+        for level, event, payload in simpleq.logger.calls
+    )
 
 
 @pytest.mark.asyncio
 async def test_worker_receive_timeout_returns_empty_batch() -> None:
     simpleq = SimpleQ()
+    simpleq.logger = SpyLogger()
 
     class HungQueue(FakeQueue):
         async def receive(
@@ -592,6 +639,22 @@ async def test_worker_receive_timeout_returns_empty_batch() -> None:
 
     assert received_queue is queue
     assert jobs == []
+    processed_samples = simpleq.metrics.jobs_processed.collect()[0].samples
+    timeout_samples = [
+        sample
+        for sample in processed_samples
+        if sample.name == "simpleq_jobs_processed_total"
+        and sample.labels.get("queue") == queue.name
+        and sample.labels.get("status") == "receive_timeout"
+    ]
+    assert len(timeout_samples) == 1
+    assert timeout_samples[0].value == 1
+    assert any(
+        level == "warning"
+        and event == "queue_receive_timeout"
+        and payload["queue_name"] == queue.name
+        for level, event, payload in simpleq.logger.calls
+    )
 
 
 @pytest.mark.asyncio
@@ -786,6 +849,68 @@ async def test_worker_heartbeat_uses_minimum_visibility_timeout_of_one_second(
 
     assert queue.visibility_changes
     assert queue.visibility_changes[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_heartbeat_records_visibility_extension_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    simpleq = SimpleQ()
+    simpleq.logger = SpyLogger()
+
+    class BrokenVisibilityQueue(FakeQueue):
+        async def change_visibility(self, job: Job, timeout_seconds: int) -> None:
+            del job, timeout_seconds
+            raise RuntimeError("heartbeat failed")
+
+    queue = BrokenVisibilityQueue(simpleq=simpleq, visibility_timeout=2)
+    worker = Worker(simpleq, [queue], concurrency=1)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+        receipt_handle="receipt-1",
+    )
+    original_sleep = asyncio.sleep
+
+    async def fast_sleep(_seconds: float) -> None:
+        await original_sleep(0)
+
+    monkeypatch.setattr("simpleq.worker.asyncio.sleep", fast_sleep)
+
+    heartbeat_task = worker._heartbeat(queue, job)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    heartbeat_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await heartbeat_task
+
+    processed_samples = simpleq.metrics.jobs_processed.collect()[0].samples
+    assert any(
+        sample.labels.get("queue") == queue.name
+        and sample.labels.get("status") == "heartbeat_error"
+        for sample in processed_samples
+    )
+    assert any(
+        level == "warning"
+        and event == "queue_visibility_heartbeat_failed"
+        and payload["queue_name"] == queue.name
+        and payload["error"] == "heartbeat failed"
+        for level, event, payload in simpleq.logger.calls
+    )
+
+
+def test_queue_has_dlq_detects_bool_flag_and_dlq_name() -> None:
+    queue = FakeQueue(simpleq=SimpleQ())
+    assert queue_has_dlq(queue) is False
+
+    queue.dlq_name = "emails-dlq"  # type: ignore[attr-defined]
+    assert queue_has_dlq(queue) is True
+
+    queue_without_name = FakeQueue(simpleq=SimpleQ())
+    queue_without_name.dlq = True  # type: ignore[attr-defined]
+    assert queue_has_dlq(queue_without_name) is True
 
 
 @pytest.mark.asyncio

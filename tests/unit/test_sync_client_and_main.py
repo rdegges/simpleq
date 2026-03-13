@@ -98,13 +98,16 @@ def test_simpleq_queue_rejects_conflicting_redefinition() -> None:
     with pytest.raises(QueueValidationError, match="already configured differently"):
         simpleq.queue("emails", dlq=False)
 
-    assert simpleq.queue(
-        "emails",
-        dlq=True,
-        wait_seconds=0,
-        visibility_timeout=7,
-        tags={"env": "test"},
-    ) is original
+    assert (
+        simpleq.queue(
+            "emails",
+            dlq=True,
+            wait_seconds=0,
+            visibility_timeout=7,
+            tags={"env": "test"},
+        )
+        is original
+    )
 
 
 def test_resolve_queue_prefers_existing_configured_queue() -> None:

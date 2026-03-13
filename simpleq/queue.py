@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, TypeVar
 from uuid import uuid4
 
 from simpleq._sync import run_sync
@@ -19,7 +19,10 @@ from simpleq.job import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+    from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+
+    from simpleq.protocols import QueueAppProtocol
+    from simpleq.serializers import JSONValue
 
 _QUEUE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 _MESSAGE_ATTRIBUTE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -148,7 +151,7 @@ class Queue:
 
     def __init__(
         self,
-        simpleq: Any,
+        simpleq: QueueAppProtocol,
         name: str,
         *,
         fifo: bool = False,
@@ -339,7 +342,7 @@ class Queue:
         if len(entries) > 10:
             raise QueueValidationError("SQS batches support at most 10 entries.")
 
-        payloads: list[dict[str, Any]] = []
+        payloads: list[dict[str, object]] = []
         total_payload_size = 0
         for entry in entries:
             resolved_group_id = (
@@ -368,7 +371,7 @@ class Queue:
                 message_body,
                 message_attributes,
             )
-            payload: dict[str, Any] = {
+            payload: dict[str, object] = {
                 "Id": uuid4().hex,
                 "MessageBody": message_body,
             }
@@ -476,19 +479,23 @@ class Queue:
 
     async def ack(self, job: Job) -> None:
         """Delete a processed message."""
-        if not has_usable_receipt_handle(job.receipt_handle):
+        receipt_handle = job.receipt_handle
+        if not has_usable_receipt_handle(receipt_handle):
             return
+        assert receipt_handle is not None
         await self._with_refreshed_queue_url(
             "delete_message",
             lambda queue_url: self.simpleq.transport.delete_message(
-                self.name, queue_url, job.receipt_handle
+                self.name, queue_url, receipt_handle
             ),
         )
 
     async def change_visibility(self, job: Job, timeout_seconds: int) -> None:
         """Change the visibility timeout of a received message."""
-        if not has_usable_receipt_handle(job.receipt_handle):
+        receipt_handle = job.receipt_handle
+        if not has_usable_receipt_handle(receipt_handle):
             return
+        assert receipt_handle is not None
         if not is_strict_int(timeout_seconds):
             raise QueueValidationError("visibility_timeout must be an integer.")
         if timeout_seconds < 0 or timeout_seconds > _MAX_VISIBILITY_TIMEOUT:
@@ -500,7 +507,7 @@ class Queue:
             lambda queue_url: self.simpleq.transport.change_message_visibility(
                 self.name,
                 queue_url,
-                job.receipt_handle,
+                receipt_handle,
                 timeout_seconds,
             ),
         )
@@ -521,9 +528,9 @@ class Queue:
         if self.dlq_name is not None:
             dlq_queue = self._dlq_queue()
             (
-                dlq_available,
-                dlq_in_flight,
-                dlq_delayed,
+                dlq_available_now,
+                dlq_in_flight_now,
+                dlq_delayed_now,
             ) = await dlq_queue._with_refreshed_queue_url(
                 "get_queue_attributes",
                 lambda dlq_url: dlq_queue._stats_for_queue(
@@ -531,7 +538,10 @@ class Queue:
                     dlq_url,
                 ),
             )
-            self.simpleq.metrics.record_queue_depth(dlq_queue.name, dlq_available)
+            self.simpleq.metrics.record_queue_depth(dlq_queue.name, dlq_available_now)
+            dlq_available = dlq_available_now
+            dlq_in_flight = dlq_in_flight_now
+            dlq_delayed = dlq_delayed_now
         return QueueStats(
             name=self.name,
             fifo=self.fifo,
@@ -620,18 +630,15 @@ class Queue:
         """Return the canonical DLQ queue object for this queue."""
         if self.dlq_name is None:
             raise QueueValidationError("DLQ support is not enabled for this queue.")
-        return cast(
-            "Queue",
-            self.simpleq.queue(
-                self.dlq_name,
-                fifo=self.fifo,
-                dlq=False,
-                max_retries=self.max_retries,
-                content_based_deduplication=self.content_based_deduplication,
-                visibility_timeout=self.visibility_timeout,
-                wait_seconds=self.wait_seconds,
-                tags=dict(self.tags) if self._tags_configured else None,
-            ),
+        return self.simpleq.queue(
+            self.dlq_name,
+            fifo=self.fifo,
+            dlq=False,
+            max_retries=self.max_retries,
+            content_based_deduplication=self.content_based_deduplication,
+            visibility_timeout=self.visibility_timeout,
+            wait_seconds=self.wait_seconds,
+            tags=dict(self.tags) if self._tags_configured else None,
         )
 
     def _create_queue_attributes(
@@ -661,7 +668,7 @@ class Queue:
         self,
         *,
         queue_url: str,
-        message: dict[str, Any],
+        message: dict[str, object],
         error: Exception,
     ) -> None:
         """Log and quarantine malformed messages so they do not poison polling."""
@@ -704,7 +711,7 @@ class Queue:
         self,
         *,
         queue_url: str,
-        message: dict[str, Any],
+        message: dict[str, object],
     ) -> Job | None:
         """Deserialize a received message into a Job, handling malformed payloads."""
         try:
@@ -754,13 +761,21 @@ class Queue:
         self,
         queue_name: str,
         attribute_name: str,
-        value: Any,
+        value: object,
     ) -> int:
         """Parse an integer queue metric while tolerating malformed values."""
         if value is None:
             return 0
+        if isinstance(value, bool):
+            self.simpleq.logger.warning(
+                "queue_stats_metric_parse_failed",
+                queue_name=queue_name,
+                attribute_name=attribute_name,
+                value=str(value),
+            )
+            return 0
         try:
-            parsed = int(value)
+            parsed = value if isinstance(value, int) else int(str(value))
         except (TypeError, ValueError):
             self.simpleq.logger.warning(
                 "queue_stats_metric_parse_failed",
@@ -787,7 +802,7 @@ class Queue:
         wait_seconds: int,
         visibility_timeout: int | None,
         receive_request_attempt_id: str | None,
-    ) -> tuple[str, list[dict[str, Any]]]:
+    ) -> tuple[str, list[dict[str, object]]]:
         messages = await self.simpleq.transport.receive_messages(
             self.name,
             queue_url,
@@ -1054,7 +1069,7 @@ def has_usable_receipt_handle(receipt_handle: str | None) -> bool:
     return isinstance(receipt_handle, str) and bool(receipt_handle.strip())
 
 
-def string_metadata(value: Any) -> str | None:
+def string_metadata(value: object) -> str | None:
     """Return a string metadata value or ``None``."""
     if value is None:
         return None
@@ -1122,7 +1137,7 @@ def persist_routing_metadata(
 
 
 def persist_metadata_value(
-    metadata: dict[str, Any],
+    metadata: dict[str, JSONValue],
     key: str,
     value: str | None,
 ) -> bool:
@@ -1136,7 +1151,10 @@ def persist_metadata_value(
     return True
 
 
-def first_metadata_value(metadata: dict[str, Any], *keys: str) -> str | None:
+def first_metadata_value(
+    metadata: Mapping[str, JSONValue],
+    *keys: str,
+) -> str | None:
     """Return the first non-null metadata value for the provided keys."""
     for key in keys:
         value = string_metadata(metadata.get(key))
@@ -1169,7 +1187,7 @@ def validate_fifo_routing_identifier(
         )
 
 
-def is_strict_int(value: Any) -> bool:
+def is_strict_int(value: object) -> bool:
     """Return whether ``value`` is an integer but not a boolean."""
     return isinstance(value, int) and not isinstance(value, bool)
 

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import (
     TYPE_CHECKING,
-    Any,
     Literal,
     ParamSpec,
     TypeVar,
+    cast,
 )
 from urllib.parse import unquote, urlparse
 
@@ -21,9 +21,17 @@ from simpleq.task import TaskDefinition, TaskHandle, TaskRegistry, task_name_for
 from simpleq.worker import Worker
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Coroutine, Sequence
 
     from pydantic import BaseModel
+
+    from simpleq.protocols import (
+        QueueAppProtocol,
+        QueueRuntimeProtocol,
+        QueueTransportProtocol,
+        TaskAppProtocol,
+        WorkerAppProtocol,
+    )
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -72,8 +80,8 @@ class SimpleQ:
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] | None = None,
         sqs_price_per_million: float | None = None,
         default_queue_name: str | None = None,
-        transport: Any | None = None,
-        session_factory: Callable[[], Any] | None = None,
+        transport: QueueTransportProtocol | None = None,
+        session_factory: Callable[[], object] | None = None,
     ) -> None:
         self.config = SimpleQConfig.from_overrides(
             region=region,
@@ -101,12 +109,12 @@ class SimpleQ:
         self.metrics = PrometheusMetrics()
         self.logger = configure_logging(self.config.log_level)
         self.registry = TaskRegistry()
-        self._transport = transport
+        self._transport: QueueTransportProtocol | None = transport
         self._session_factory = session_factory
         self._queues: dict[str, Queue] = {}
 
     @property
-    def transport(self) -> Any:
+    def transport(self) -> QueueTransportProtocol:
         """Return the configured transport, creating the default lazily."""
         if self._transport is None:
             self._transport = SQSClient(
@@ -117,7 +125,7 @@ class SimpleQ:
         return self._transport
 
     @transport.setter
-    def transport(self, value: Any) -> None:
+    def transport(self, value: QueueTransportProtocol) -> None:
         """Override the transport used for queue operations."""
         self._transport = value
 
@@ -135,7 +143,7 @@ class SimpleQ:
     ) -> Queue:
         """Create or return a cached queue object."""
         requested = Queue(
-            self,
+            cast("QueueAppProtocol", self),
             name,
             fifo=fifo,
             dlq=dlq,
@@ -199,13 +207,13 @@ class SimpleQ:
             tags=dict(queue.tags) if queue._tags_configured else None,
         )
 
-    def resolve_queue(self, queue_ref: Any | None) -> Queue:
+    def resolve_queue(self, queue_ref: Queue | str | None) -> Queue:
         """Resolve a queue reference into a Queue instance."""
         if queue_ref is None:
             default_name = self.config.default_queue_name
             return self.queue(default_name, fifo=default_name.endswith(".fifo"))
         if isinstance(queue_ref, Queue):
-            if queue_ref.simpleq is self:
+            if cast("object", queue_ref.simpleq) is self:
                 return queue_ref
             return self._clone_queue(queue_ref)
         if isinstance(queue_ref, str):
@@ -260,7 +268,7 @@ class SimpleQ:
                 max_retries=max_retries,
             )
             self.registry.register(definition)
-            return TaskHandle(self, definition)
+            return TaskHandle(cast("TaskAppProtocol", self), definition)
 
         return decorator
 
@@ -276,8 +284,8 @@ class SimpleQ:
         """Create a worker for the specified queues."""
         resolved_queues = [self.resolve_queue(queue) for queue in queues]
         return Worker(
-            self,
-            resolved_queues,
+            cast("WorkerAppProtocol", self),
+            cast("Sequence[QueueRuntimeProtocol]", resolved_queues),
             concurrency=(
                 self.config.concurrency if concurrency is None else concurrency
             ),
@@ -306,7 +314,7 @@ class SimpleQ:
         """Synchronous wrapper for :meth:`list_queues`."""
         return run_sync(self.list_queues(prefix))
 
-    def run_sync(self, awaitable: Any) -> Any:
+    def run_sync(self, awaitable: Coroutine[object, object, R]) -> R:
         """Expose the sync helper for CLI callers."""
         return run_sync(awaitable)
 

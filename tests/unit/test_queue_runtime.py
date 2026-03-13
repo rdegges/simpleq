@@ -87,6 +87,28 @@ class FakeTransport:
         )
 
 
+class SpyLogger:
+    """Capture structured log events emitted by queue runtime paths."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def debug(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("debug", event, dict(kwargs)))
+
+    def info(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("info", event, dict(kwargs)))
+
+    def warning(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("warning", event, dict(kwargs)))
+
+    def error(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("error", event, dict(kwargs)))
+
+    def critical(self, event: str, /, **kwargs: object) -> None:
+        self.calls.append(("critical", event, dict(kwargs)))
+
+
 @pytest.mark.asyncio
 async def test_queue_stats_include_dlq_depth(
     simpleq_with_fake_transport: SimpleQ,
@@ -291,6 +313,7 @@ async def test_queue_enqueue_recovers_from_stale_queue_url() -> None:
             )
 
     simpleq = SimpleQ()
+    simpleq.logger = SpyLogger()
     transport = FlakySendTransport()
     simpleq.transport = transport
     queue = simpleq.queue("emails", wait_seconds=0)
@@ -309,6 +332,13 @@ async def test_queue_enqueue_recovers_from_stale_queue_url() -> None:
         "emails",
     ]
     assert len(transport.sent) == 1
+    assert any(
+        level == "warning"
+        and event == "queue_url_stale_retry"
+        and payload["queue_name"] == queue.name
+        and payload["operation"] == "send_message"
+        for level, event, payload in simpleq.logger.calls
+    )
 
 
 @pytest.mark.asyncio
@@ -608,6 +638,7 @@ async def test_queue_receive_skips_and_deletes_malformed_messages(
 @pytest.mark.asyncio
 async def test_queue_receive_skips_malformed_messages_without_receipt_handle() -> None:
     simpleq = SimpleQ()
+    simpleq.logger = SpyLogger()
     simpleq.transport = FakeTransport()
     queue = simpleq.queue("emails", wait_seconds=0)
     simpleq.transport.receive_queue = [
@@ -626,6 +657,19 @@ async def test_queue_receive_skips_malformed_messages_without_receipt_handle() -
     assert received == []
     assert simpleq.transport.deleted_messages == []
     assert simpleq.cost_tracker.metrics_for("emails").jobs_decode_failed == 1
+    processed_samples = simpleq.metrics.jobs_processed.collect()[0].samples
+    assert any(
+        sample.labels.get("queue") == queue.name
+        and sample.labels.get("status") == "decode_error"
+        for sample in processed_samples
+    )
+    assert any(
+        level == "warning"
+        and event == "queue_malformed_message_missing_receipt_handle"
+        and payload["queue_name"] == queue.name
+        and payload["message_id"] == "mid-bad"
+        for level, event, payload in simpleq.logger.calls
+    )
 
 
 @pytest.mark.asyncio
@@ -638,6 +682,7 @@ async def test_queue_receive_logs_when_deleting_malformed_message_fails() -> Non
             raise RuntimeError("delete failed")
 
     simpleq = SimpleQ()
+    simpleq.logger = SpyLogger()
     simpleq.transport = DeleteFailsTransport()
     queue = simpleq.queue("emails", wait_seconds=0)
     simpleq.transport.receive_queue = [
@@ -656,6 +701,27 @@ async def test_queue_receive_logs_when_deleting_malformed_message_fails() -> Non
 
     assert received == []
     assert simpleq.cost_tracker.metrics_for("emails").jobs_decode_failed == 1
+    processed_samples = simpleq.metrics.jobs_processed.collect()[0].samples
+    assert any(
+        sample.labels.get("queue") == queue.name
+        and sample.labels.get("status") == "decode_error"
+        for sample in processed_samples
+    )
+    assert any(
+        level == "error"
+        and event == "queue_message_deserialization_failed"
+        and payload["queue_name"] == queue.name
+        and payload["message_id"] == "mid-bad"
+        for level, event, payload in simpleq.logger.calls
+    )
+    assert any(
+        level == "error"
+        and event == "queue_malformed_message_delete_failed"
+        and payload["queue_name"] == queue.name
+        and payload["message_id"] == "mid-bad"
+        and payload["error"] == "delete failed"
+        for level, event, payload in simpleq.logger.calls
+    )
 
 
 @pytest.mark.asyncio

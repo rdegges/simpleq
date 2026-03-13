@@ -6,13 +6,17 @@ import importlib
 import inspect
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
-from typing import Any, Generic, ParamSpec, TypeVar, cast
+from typing import TYPE_CHECKING, Generic, ParamSpec, TypeVar, cast
 
 from pydantic import BaseModel
 
 from simpleq._sync import run_sync
 from simpleq.exceptions import InvalidTaskError, TaskNotRegisteredError
 from simpleq.job import Job
+
+if TYPE_CHECKING:
+    from simpleq.protocols import TaskAppProtocol
+    from simpleq.queue import Queue
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -25,8 +29,8 @@ class TaskDefinition:
     """Immutable task registration metadata."""
 
     name: str
-    func: Callable[..., Any]
-    queue_ref: Any | None = None
+    func: Callable[..., object]
+    queue_ref: Queue | str | None = None
     serializer: str = "json"
     schema: type[BaseModel] | None = None
     message_group_id: Resolver | None = None
@@ -40,7 +44,7 @@ class TaskDefinition:
         return inspect.iscoroutinefunction(self.func)
 
 
-def task_name_for(func: Callable[..., Any]) -> str:
+def task_name_for(func: Callable[..., object]) -> str:
     """Return a stable import path for a task."""
     qualname = func.__qualname__
     if "<locals>" in qualname:
@@ -48,7 +52,7 @@ def task_name_for(func: Callable[..., Any]) -> str:
     return f"{func.__module__}:{qualname}"
 
 
-def import_task_callable(task_name: str) -> Callable[..., Any]:
+def import_task_callable(task_name: str) -> Callable[..., object]:
     """Import a task callable by its fully-qualified task name."""
     return import_task_definition(task_name).func
 
@@ -64,19 +68,21 @@ def import_task_definition(task_name: str) -> TaskDefinition:
         raise TaskNotRegisteredError(
             f"Could not import module '{module_name}' for task '{task_name}': {exc}"
         ) from exc
-    target: Any = module
+    target: object = module
     try:
         for part in attr_path.split("."):
             target = getattr(target, part)
     except AttributeError as exc:
         raise TaskNotRegisteredError(
-            f"Could not resolve task attribute '{attr_path}' in module "
-            f"'{module_name}'."
+            f"Could not resolve task attribute '{attr_path}' in module '{module_name}'."
         ) from exc
     if isinstance(target, TaskHandle):
         return replace(target.definition, name=task_name)
     if callable(target):
-        return TaskDefinition(name=task_name, func=cast("Callable[..., Any]", target))
+        return TaskDefinition(
+            name=task_name,
+            func=cast("Callable[..., object]", target),
+        )
     raise TaskNotRegisteredError(f"Task '{task_name}' did not resolve to a callable.")
 
 
@@ -115,7 +121,7 @@ class TaskRegistry:
 class TaskHandle(Generic[P, R]):
     """User-facing task wrapper with enqueue helpers."""
 
-    def __init__(self, simpleq: Any, definition: TaskDefinition) -> None:
+    def __init__(self, simpleq: TaskAppProtocol, definition: TaskDefinition) -> None:
         self._simpleq = simpleq
         self.definition = definition
         self.__name__ = definition.func.__name__
@@ -128,12 +134,12 @@ class TaskHandle(Generic[P, R]):
 
     async def delay(
         self,
-        *args: Any,
+        *args: object,
         delay_seconds: int = 0,
         message_group_id: str | None = None,
         deduplication_id: str | None = None,
         attributes: dict[str, str] | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> Job:
         """Validate arguments and enqueue a task invocation."""
         queue = self._simpleq.resolve_queue(self.definition.queue_ref)
@@ -174,12 +180,12 @@ class TaskHandle(Generic[P, R]):
 
     def delay_sync(
         self,
-        *args: Any,
+        *args: object,
         delay_seconds: int = 0,
         message_group_id: str | None = None,
         deduplication_id: str | None = None,
         attributes: dict[str, str] | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> Job:
         """Synchronous wrapper around :meth:`delay`."""
         return run_sync(
@@ -194,8 +200,8 @@ class TaskHandle(Generic[P, R]):
         )
 
     def _normalize_arguments(
-        self, args: tuple[Any, ...], kwargs: dict[str, Any]
-    ) -> tuple[Any, dict[str, Any]]:
+        self, args: tuple[object, ...], kwargs: dict[str, object]
+    ) -> tuple[object, dict[str, object]]:
         schema = self.definition.schema
         if schema is None:
             return tuple(args), dict(kwargs)
@@ -206,8 +212,8 @@ class TaskHandle(Generic[P, R]):
 
 def normalize_schema_input(
     schema: type[SchemaT],
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
 ) -> SchemaT:
     """Normalize task arguments for a Pydantic schema task."""
     if args and kwargs:
@@ -221,8 +227,8 @@ def normalize_schema_input(
 
 def resolve_value(
     value: Resolver | None,
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
 ) -> str | None:
     """Resolve a string or callable task option."""
     if value is None:
