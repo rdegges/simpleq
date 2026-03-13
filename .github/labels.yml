@@ -1,0 +1,12 @@
+- name: quality
+  color: "0e8a16"
+  description: Cross-cutting quality improvements and roadmap items.
+- name: docs-smoke
+  color: "1d76db"
+  description: Documentation, examples, and docs verification failures.
+- name: reliability
+  color: "b60205"
+  description: Failure modes, retries, queue semantics, and durability work.
+- name: typing
+  color: "5319e7"
+  description: Type coverage, protocols, and API typing improvements.

@@ -26,7 +26,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-urls = {Homepage = "https://github.com/rdegges/simpleq", Documentation = "https://rdegges.github.io/simpleq/", Repository = "https://github.com/rdegges/simpleq", Issues = "https://github.com/rdegges/simpleq/issues", Changelog = "https://github.com/rdegges/simpleq/releases"}
+urls = {Homepage = "https://github.com/rdegges/simpleq", Documentation = "https://rdegges.github.io/simpleq/", Repository = "https://github.com/rdegges/simpleq", Issues = "https://github.com/rdegges/simpleq/issues", Changelog = "https://github.com/rdegges/simpleq/blob/main/CHANGELOG.md"}
 dependencies = [
   "boto3>=1.40.0,<2.0.0",
   "botocore>=1.40.0,<2.0.0",
@@ -135,5 +135,6 @@ branch = true
 source = ["simpleq"]
 
 [tool.coverage.report]
+fail_under = 95
 show_missing = true
 skip_covered = false

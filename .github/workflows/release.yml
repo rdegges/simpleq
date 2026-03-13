@@ -20,9 +20,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build
+      - name: Verify changelog entry
+        run: grep -q "^## \\[${GITHUB_REF_NAME#v}\\]" CHANGELOG.md
+
+      - name: Quality checks
         run: |
           uv sync --all-extras
+          uv run ruff check .
+          uv run mypy simpleq
+          uv run mkdocs build --strict
+          uv run pytest tests/unit/test_examples_and_docs.py
+
+      - name: Build
+        run: |
           uv build
 
       - name: Publish to PyPI

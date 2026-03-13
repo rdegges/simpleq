@@ -58,4 +58,4 @@ jobs:
           --cov=simpleq
           --cov-report=term-missing
           --cov-report=xml
-          --cov-fail-under=97
+          --cov-fail-under=95

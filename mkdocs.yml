@@ -16,6 +16,7 @@ nav:
   - LocalStack: localstack.md
   - Troubleshooting: troubleshooting.md
   - Compatibility: compatibility.md
+  - Stability: stability.md
   - Benchmarks: benchmarks.md
   - Migration: migration.md
   - Migrating from Celery: migration-celery.md
