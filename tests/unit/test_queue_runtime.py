@@ -673,6 +673,38 @@ async def test_queue_receive_skips_malformed_messages_without_receipt_handle() -
 
 
 @pytest.mark.asyncio
+async def test_queue_receive_treats_blank_receipt_handle_as_missing() -> None:
+    simpleq = SimpleQ()
+    simpleq.logger = SpyLogger()
+    simpleq.transport = FakeTransport()
+    queue = simpleq.queue("emails", wait_seconds=0)
+    simpleq.transport.receive_queue = [
+        [
+            {
+                "Body": "{not-json",
+                "ReceiptHandle": "   ",
+                "MessageId": "mid-bad",
+                "Attributes": {"ApproximateReceiveCount": "1"},
+                "MessageAttributes": {},
+            }
+        ]
+    ]
+
+    received = await queue.receive(max_messages=1, wait_seconds=0)
+
+    assert received == []
+    assert simpleq.transport.deleted_messages == []
+    assert simpleq.cost_tracker.metrics_for("emails").jobs_decode_failed == 1
+    assert any(
+        level == "warning"
+        and event == "queue_malformed_message_missing_receipt_handle"
+        and payload["queue_name"] == queue.name
+        and payload["message_id"] == "mid-bad"
+        for level, event, payload in simpleq.logger.calls
+    )
+
+
+@pytest.mark.asyncio
 async def test_queue_receive_logs_when_deleting_malformed_message_fails() -> None:
     class DeleteFailsTransport(FakeTransport):
         async def delete_message(

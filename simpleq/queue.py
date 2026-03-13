@@ -673,7 +673,10 @@ class Queue:
     ) -> None:
         """Log and quarantine malformed messages so they do not poison polling."""
         message_id = str(message.get("MessageId", "unknown"))
-        receipt_handle = message.get("ReceiptHandle")
+        raw_receipt_handle = message.get("ReceiptHandle")
+        receipt_handle = (
+            raw_receipt_handle if isinstance(raw_receipt_handle, str) else None
+        )
         self.simpleq.logger.error(
             "queue_message_deserialization_failed",
             queue_name=self.name,
@@ -686,13 +689,14 @@ class Queue:
             duration_seconds=0.0,
         )
         self.simpleq.cost_tracker.job_decode_failed(self.name)
-        if not isinstance(receipt_handle, str) or not receipt_handle:
+        if not has_usable_receipt_handle(receipt_handle):
             self.simpleq.logger.warning(
                 "queue_malformed_message_missing_receipt_handle",
                 queue_name=self.name,
                 message_id=message_id,
             )
             return
+        assert receipt_handle is not None
         try:
             await self.simpleq.transport.delete_message(
                 self.name,
