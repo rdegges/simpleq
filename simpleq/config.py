@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import socket
 from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
 from typing import Literal, cast
 from urllib.parse import urlparse
@@ -36,6 +37,8 @@ def _validate_int_range(
 def _validate_non_negative_float(*, name: str, value: float) -> None:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise ValueError(f"{name} must be a number.")
+    if not isfinite(float(value)):
+        raise ValueError(f"{name} must be a finite number.")
     if value < 0:
         raise ValueError(f"{name} must be non-negative.")
 

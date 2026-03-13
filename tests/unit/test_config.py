@@ -455,6 +455,56 @@ def test_from_overrides_rejects_invalid_poll_interval_env_with_context(
         SimpleQConfig.from_overrides()
 
 
+@pytest.mark.parametrize(
+    ("env_name", "value", "match"),
+    [
+        ("SIMPLEQ_POLL_INTERVAL", "NaN", "poll_interval must be a finite number"),
+        (
+            "SIMPLEQ_SQS_PRICE_PER_MILLION",
+            "Infinity",
+            "sqs_price_per_million must be a finite number",
+        ),
+        (
+            "SIMPLEQ_RECEIVE_TIMEOUT_SECONDS",
+            "inf",
+            "receive_timeout_seconds must be a finite number",
+        ),
+    ],
+)
+def test_from_overrides_rejects_non_finite_float_env_values(
+    monkeypatch: pytest.MonkeyPatch,
+    env_name: str,
+    value: str,
+    match: str,
+) -> None:
+    monkeypatch.setenv(env_name, value)
+
+    with pytest.raises(ValueError, match=match):
+        SimpleQConfig.from_overrides()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"poll_interval": float("nan")}, "poll_interval must be a finite number"),
+        (
+            {"sqs_price_per_million": float("inf")},
+            "sqs_price_per_million must be a finite number",
+        ),
+        (
+            {"receive_timeout_seconds": float("nan")},
+            "receive_timeout_seconds must be a finite number",
+        ),
+    ],
+)
+def test_from_overrides_rejects_non_finite_explicit_float_values(
+    kwargs: dict[str, object],
+    match: str,
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        SimpleQConfig.from_overrides(**kwargs)
+
+
 def test_from_overrides_rejects_boolean_explicit_float_override() -> None:
     with pytest.raises(ValueError, match="sqs_price_per_million must be a number"):
         SimpleQConfig.from_overrides(sqs_price_per_million=True)

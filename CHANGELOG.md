@@ -59,6 +59,9 @@ All notable changes to SimpleQ are documented in this file.
   queue URLs, and SQS queue ARNs (normalized to queue names at config load),
   which simplifies deploying workers from infrastructure outputs without manual
   string rewriting.
+- Float config values now reject non-finite inputs (`NaN`, `Infinity`) for
+  `poll_interval`, `receive_timeout_seconds`, and `sqs_price_per_million`,
+  preventing unstable runtime behavior from malformed environment overrides.
 
 ## [2.0.0] - 2026-03-13
 
