@@ -650,6 +650,32 @@ async def test_fifo_queue_receive_passes_receive_request_attempt_id_to_transport
 
 
 @pytest.mark.asyncio
+async def test_fifo_queue_receive_normalizes_receive_request_attempt_id(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue(
+        "orders.fifo",
+        fifo=True,
+        content_based_deduplication=True,
+        wait_seconds=0,
+    )
+    simpleq_with_fake_transport.transport.receive_queue = [[]]
+
+    await queue.receive(
+        max_messages=1,
+        wait_seconds=0,
+        receive_request_attempt_id="  attempt-1  ",
+    )
+
+    assert (
+        simpleq_with_fake_transport.transport.receive_calls[0][
+            "receive_request_attempt_id"
+        ]
+        == "attempt-1"
+    )
+
+
+@pytest.mark.asyncio
 async def test_queue_batch_dlq_and_misc_branches(
     simpleq_with_fake_transport: SimpleQ,
 ) -> None:

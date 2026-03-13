@@ -419,11 +419,14 @@ class Queue:
         resolved_wait_seconds = (
             wait_seconds if wait_seconds is not None else self.wait_seconds
         )
+        resolved_receive_request_attempt_id = normalize_receive_request_attempt_id(
+            receive_request_attempt_id
+        )
         self._validate_receive_options(
             max_messages=resolved_max_messages,
             wait_seconds=resolved_wait_seconds,
             visibility_timeout=visibility_timeout,
-            receive_request_attempt_id=receive_request_attempt_id,
+            receive_request_attempt_id=resolved_receive_request_attempt_id,
         )
         queue_url, messages = await self._with_refreshed_queue_url(
             "receive_messages",
@@ -432,7 +435,7 @@ class Queue:
                 max_messages=resolved_max_messages,
                 wait_seconds=resolved_wait_seconds,
                 visibility_timeout=visibility_timeout,
-                receive_request_attempt_id=receive_request_attempt_id,
+                receive_request_attempt_id=resolved_receive_request_attempt_id,
             ),
         )
         decoded = [
@@ -954,17 +957,12 @@ class Queue:
                     f"visibility_timeout must be between 0 and {_MAX_VISIBILITY_TIMEOUT}."
                 )
         if receive_request_attempt_id is not None:
-            if not isinstance(receive_request_attempt_id, str):
-                raise QueueValidationError(
-                    "receive_request_attempt_id must be a string."
-                )
+            receive_request_attempt_id = normalize_receive_request_attempt_id(
+                receive_request_attempt_id
+            )
             if not self.fifo:
                 raise QueueValidationError(
                     "receive_request_attempt_id is only supported for FIFO queues."
-                )
-            if not receive_request_attempt_id:
-                raise QueueValidationError(
-                    "receive_request_attempt_id must be a non-empty string."
                 )
             if len(receive_request_attempt_id) > _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH:
                 raise QueueValidationError(
@@ -1033,6 +1031,20 @@ def validate_positive_limit(name: str, value: int | None) -> None:
         raise QueueValidationError(f"{name} must be an integer.")
     if value < 1:
         raise QueueValidationError(f"{name} must be at least 1.")
+
+
+def normalize_receive_request_attempt_id(value: str | None) -> str | None:
+    """Normalize FIFO receive request attempt IDs from user input."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise QueueValidationError("receive_request_attempt_id must be a string.")
+    normalized = value.strip()
+    if not normalized:
+        raise QueueValidationError(
+            "receive_request_attempt_id must be a non-empty string."
+        )
+    return normalized
 
 
 def string_metadata(value: Any) -> str | None:

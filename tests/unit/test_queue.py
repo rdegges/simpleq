@@ -143,6 +143,7 @@ def test_queue_rejects_non_integer_receive_options() -> None:
     ("attempt_id", "message"),
     [
         ("", "receive_request_attempt_id must be a non-empty string"),
+        ("   ", "receive_request_attempt_id must be a non-empty string"),
         ("x" * 129, "receive_request_attempt_id must be 128 characters or fewer"),
     ],
 )

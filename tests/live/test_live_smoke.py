@@ -138,6 +138,46 @@ async def test_live_fifo_receive_supports_request_attempt_id() -> None:
 
 @pytest.mark.live
 @pytest.mark.asyncio
+async def test_live_fifo_receive_normalizes_request_attempt_id_whitespace() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
+    queue = simpleq.queue(
+        f"simpleq-live-attempt-strip-{uuid4().hex[:8]}.fifo",
+        fifo=True,
+        content_based_deduplication=False,
+        wait_seconds=0,
+    )
+    task = simpleq.task(
+        queue=queue,
+        message_group_id="group-1",
+        deduplication_id=lambda value: f"dedup-{value}",
+    )(tasks.record_sync)
+
+    try:
+        await task.delay("attempt-id-strip")
+        received = await queue.receive(
+            max_messages=1,
+            wait_seconds=0,
+            receive_request_attempt_id="  attempt-1  ",
+        )
+        assert len(received) == 1
+        assert received[0].args == ("attempt-id-strip",)
+        await queue.ack(received[0])
+    finally:
+        await queue.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
 async def test_live_list_queues_returns_sorted_unique_names_for_prefix() -> None:
     _load_dotenv(Path(".env"))
     required = [
