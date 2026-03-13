@@ -56,6 +56,8 @@ Worker runtime options are strict: `concurrency` must be an integer, while
 must be numeric values (booleans are rejected).
 Use `SIMPLEQ_POLL_INTERVAL` to set a global default polling interval across
 workers.
+Use `SIMPLEQ_RECEIVE_TIMEOUT_SECONDS` to set a global default receive timeout
+for workers that do not pass `receive_timeout_seconds` explicitly.
 
 Treat each queue name as a single definition per `SimpleQ` instance. Reuse the
 same `queue` object, or pass the same FIFO/DLQ/retry/timing settings each time

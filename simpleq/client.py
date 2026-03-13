@@ -59,6 +59,7 @@ class SimpleQ:
         batch_size: int | None = None,
         wait_seconds: int | None = None,
         poll_interval: float | None = None,
+        receive_timeout_seconds: float | None = None,
         visibility_timeout: int | None = None,
         concurrency: int | None = None,
         graceful_shutdown_timeout: int | None = None,
@@ -80,6 +81,7 @@ class SimpleQ:
             batch_size=batch_size,
             wait_seconds=wait_seconds,
             poll_interval=poll_interval,
+            receive_timeout_seconds=receive_timeout_seconds,
             visibility_timeout=visibility_timeout,
             concurrency=concurrency,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
@@ -282,7 +284,11 @@ class SimpleQ:
             poll_interval=(
                 self.config.poll_interval if poll_interval is None else poll_interval
             ),
-            receive_timeout_seconds=receive_timeout_seconds,
+            receive_timeout_seconds=(
+                self.config.receive_timeout_seconds
+                if receive_timeout_seconds is None
+                else receive_timeout_seconds
+            ),
             graceful_shutdown_timeout=graceful_shutdown_timeout,
         )
 

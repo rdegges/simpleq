@@ -204,6 +204,7 @@ class SimpleQConfig:
     batch_size: int = 10
     wait_seconds: int = 20
     poll_interval: float = 1.0
+    receive_timeout_seconds: float | None = None
     visibility_timeout: int = 300
     concurrency: int = 10
     graceful_shutdown_timeout: int = 30
@@ -226,6 +227,7 @@ class SimpleQConfig:
         batch_size: int | None = None,
         wait_seconds: int | None = None,
         poll_interval: float | None = None,
+        receive_timeout_seconds: float | None = None,
         visibility_timeout: int | None = None,
         concurrency: int | None = None,
         graceful_shutdown_timeout: int | None = None,
@@ -259,6 +261,20 @@ class SimpleQConfig:
             "SIMPLEQ_POLL_INTERVAL",
             config.poll_interval,
         )
+        if receive_timeout_seconds is not None:
+            config.receive_timeout_seconds = receive_timeout_seconds
+        else:
+            receive_timeout_seconds_env = os.getenv("SIMPLEQ_RECEIVE_TIMEOUT_SECONDS")
+            if receive_timeout_seconds_env is None:
+                config.receive_timeout_seconds = None
+            else:
+                try:
+                    config.receive_timeout_seconds = float(receive_timeout_seconds_env)
+                except ValueError as exc:
+                    raise ValueError(
+                        "Invalid float for SIMPLEQ_RECEIVE_TIMEOUT_SECONDS: "
+                        f"{receive_timeout_seconds_env!r}."
+                    ) from exc
         config.visibility_timeout = _coalesce_int(
             visibility_timeout,
             "SIMPLEQ_VISIBILITY_TIMEOUT",
@@ -338,6 +354,13 @@ def validate_config(config: SimpleQConfig) -> None:
         maximum=20,
     )
     _validate_non_negative_float(name="poll_interval", value=config.poll_interval)
+    if config.receive_timeout_seconds is not None:
+        _validate_non_negative_float(
+            name="receive_timeout_seconds",
+            value=config.receive_timeout_seconds,
+        )
+        if config.receive_timeout_seconds <= 0:
+            raise ValueError("receive_timeout_seconds must be greater than 0.")
     _validate_int_range(
         name="visibility_timeout",
         value=config.visibility_timeout,

@@ -206,6 +206,14 @@ def test_simpleq_worker_factory_uses_configured_poll_interval_by_default() -> No
     assert worker.poll_interval == 0.3
 
 
+def test_simpleq_worker_factory_uses_configured_receive_timeout_by_default() -> None:
+    simpleq = SimpleQ(concurrency=4, receive_timeout_seconds=12.5)
+
+    worker = simpleq.worker(queues=["emails"])
+
+    assert worker.receive_timeout_seconds == 12.5
+
+
 def test_simpleq_worker_factory_rejects_invalid_concurrency_override() -> None:
     simpleq = SimpleQ(concurrency=4)
     with pytest.raises(ValueError, match="concurrency must be at least 1"):

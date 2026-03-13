@@ -12,6 +12,8 @@ Recommended settings:
 
 - set `SIMPLEQ_CONCURRENCY` (must be `>= 1`)
 - tune `SIMPLEQ_POLL_INTERVAL` (seconds between empty polls, must be `>= 0`)
+- set `SIMPLEQ_RECEIVE_TIMEOUT_SECONDS` (seconds, must be `> 0`) to bound
+  `ReceiveMessage` calls across workers
 - set `SIMPLEQ_REGION` for explicit per-service region control
 - keep `SIMPLEQ_BATCH_SIZE` between `1` and `10`
 - keep `SIMPLEQ_WAIT_SECONDS` between `0` and `20`

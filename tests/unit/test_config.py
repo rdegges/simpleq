@@ -244,6 +244,7 @@ def test_numeric_env_and_explicit_float_overrides(
     assert from_env.batch_size == 8
     assert from_env.sqs_price_per_million == 0.9
     assert from_env.poll_interval == 0.25
+    assert from_env.receive_timeout_seconds is None
 
     explicit = SimpleQConfig.from_overrides(sqs_price_per_million=0.2)
     assert explicit.sqs_price_per_million == 0.2
@@ -257,6 +258,60 @@ def test_from_overrides_prefers_explicit_poll_interval(
     config = SimpleQConfig.from_overrides(poll_interval=0.1)
 
     assert config.poll_interval == 0.1
+
+
+def test_from_overrides_reads_receive_timeout_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_RECEIVE_TIMEOUT_SECONDS", "45")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.receive_timeout_seconds == 45.0
+
+
+def test_from_overrides_prefers_explicit_receive_timeout_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_RECEIVE_TIMEOUT_SECONDS", "45")
+
+    config = SimpleQConfig.from_overrides(receive_timeout_seconds=7.5)
+
+    assert config.receive_timeout_seconds == 7.5
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        (
+            {"receive_timeout_seconds": -1},
+            "receive_timeout_seconds must be non-negative",
+        ),
+        (
+            {"receive_timeout_seconds": 0},
+            "receive_timeout_seconds must be greater than 0",
+        ),
+        ({"receive_timeout_seconds": True}, "receive_timeout_seconds must be a number"),
+    ],
+)
+def test_from_overrides_rejects_invalid_receive_timeout_seconds(
+    kwargs: dict[str, object],
+    match: str,
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        SimpleQConfig.from_overrides(**kwargs)
+
+
+def test_from_overrides_rejects_invalid_receive_timeout_seconds_env_with_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_RECEIVE_TIMEOUT_SECONDS", "forever")
+
+    with pytest.raises(
+        ValueError,
+        match="Invalid float for SIMPLEQ_RECEIVE_TIMEOUT_SECONDS",
+    ):
+        SimpleQConfig.from_overrides()
 
 
 def test_from_overrides_rejects_invalid_boolean_env(
