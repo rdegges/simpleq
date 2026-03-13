@@ -170,11 +170,13 @@ def detect_localstack_endpoint() -> str | None:
     if auto_localstack is False:
         return None
 
-    if hostname := os.getenv("LOCALSTACK_HOSTNAME"):
-        return _localstack_endpoint_from_hostname(hostname)
-
-    if hostname := os.getenv("LOCALSTACK_HOST"):
-        return _localstack_endpoint_from_hostname(hostname)
+    for env_name in ("LOCALSTACK_HOSTNAME", "LOCALSTACK_HOST"):
+        hostname = os.getenv(env_name)
+        if hostname is None:
+            continue
+        normalized = hostname.strip()
+        if normalized:
+            return _localstack_endpoint_from_hostname(normalized)
 
     env_name = os.getenv("SIMPLEQ_ENV", "").strip().lower()
     inside_docker = Path("/.dockerenv").exists()

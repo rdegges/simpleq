@@ -67,6 +67,24 @@ def test_detect_localstack_uses_localstack_host_when_hostname_missing(
     assert detect_localstack_endpoint() == "http://localstack:4566"
 
 
+def test_detect_localstack_ignores_blank_localstack_hostname_and_uses_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOCALSTACK_HOSTNAME", "   ")
+    monkeypatch.setenv("LOCALSTACK_HOST", "localstack")
+
+    assert detect_localstack_endpoint() == "http://localstack:4566"
+
+
+def test_detect_localstack_ignores_blank_localstack_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOCALSTACK_HOST", "   ")
+    monkeypatch.setattr("simpleq.config._endpoint_reachable", lambda _url: False)
+
+    assert detect_localstack_endpoint() is None
+
+
 @pytest.mark.parametrize(
     ("hostname", "expected"),
     [

@@ -43,6 +43,9 @@ All notable changes to SimpleQ are documented in this file.
 - Queue deletion now retries once after stale-URL invalidation even when the
   refreshed queue URL string is unchanged, reducing false no-op deletes during
   eventual-consistency windows.
+- LocalStack endpoint auto-detection now ignores blank `LOCALSTACK_HOSTNAME`
+  and `LOCALSTACK_HOST` env values, preventing malformed `http://:4566`
+  endpoints and improving startup resilience in CI/container environments.
 - Worker shutdown now exits immediately after receive-task cancellation instead
   of waiting an extra `poll_interval`, improving stop latency for idle workers.
 - `SQSClient.purge_queue()` now maps AWS `PurgeQueueInProgress` failures to a
