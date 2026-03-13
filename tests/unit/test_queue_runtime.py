@@ -421,7 +421,48 @@ async def test_queue_delete_rejects_non_string_queue_url_from_transport() -> Non
 
 
 @pytest.mark.asyncio
-async def test_queue_delete_treats_missing_queue_errors_from_get_queue_url_as_noop() -> None:
+async def test_queue_delete_retries_with_refreshed_queue_url_after_stale_cache() -> (
+    None
+):
+    class RefreshingDeleteTransport(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.cache_invalidated = False
+            self.get_queue_url_calls = 0
+
+        async def get_queue_url(self, queue_name: str) -> str | None:
+            del queue_name
+            self.get_queue_url_calls += 1
+            if self.get_queue_url_calls == 1:
+                return "https://example.com/emails-stale"
+            return "https://example.com/emails-fresh"
+
+        async def delete_queue(self, queue_name: str, queue_url: str) -> None:
+            if queue_url.endswith("stale"):
+                raise QueueNotFoundError("Queue URL is stale.")
+            await super().delete_queue(queue_name, queue_url)
+
+        def invalidate_queue_url(self, queue_name: str) -> None:
+            del queue_name
+            self.cache_invalidated = True
+
+    simpleq = SimpleQ()
+    transport = RefreshingDeleteTransport()
+    simpleq.transport = transport
+    queue = simpleq.queue("emails", wait_seconds=0)
+
+    await queue.delete()
+
+    assert transport.deleted == ["emails"]
+    assert transport.cache_invalidated is True
+    assert transport.get_queue_url_calls == 2
+    assert transport.ensured == []
+
+
+@pytest.mark.asyncio
+async def test_queue_delete_treats_missing_queue_errors_from_get_queue_url_as_noop() -> (
+    None
+):
     class MissingQueueUrlTransport(FakeTransport):
         async def get_queue_url(self, queue_name: str) -> str | None:
             raise QueueNotFoundError(f"Queue '{queue_name}' is not defined.")

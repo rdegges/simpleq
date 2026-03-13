@@ -310,6 +310,40 @@ async def test_live_delete_recovers_from_stale_cached_queue_url() -> None:
 
 @pytest.mark.live
 @pytest.mark.asyncio
+async def test_live_delete_retries_after_queue_recreated_with_new_url() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
+    queue = simpleq.queue(
+        f"simpleq-live-stale-recreate-{uuid4().hex[:8]}",
+        wait_seconds=0,
+    )
+
+    stale_url = await queue.ensure_exists()
+    await asyncio.to_thread(simpleq.transport.client.delete_queue, QueueUrl=stale_url)
+    await simpleq.transport.ensure_queue(queue.name)
+
+    await queue.delete()
+    simpleq.transport.invalidate_queue_url(queue.name)
+
+    for _ in range(20):
+        if await simpleq.transport.get_queue_url(queue.name) is None:
+            break
+        await asyncio.sleep(0.2)
+    else:
+        raise AssertionError("Queue still exists after stale-cache recreate recovery.")
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
 async def test_live_message_attributes_support_values_over_256_kib() -> None:
     _load_dotenv(Path(".env"))
     required = [

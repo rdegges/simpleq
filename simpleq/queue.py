@@ -249,22 +249,16 @@ class Queue:
 
     async def delete(self) -> None:
         """Delete the queue and its DLQ when present."""
-        queue_url = await self._queue_url_for_delete(self.name, self._queue_url)
-        if queue_url is not None:
-            try:
-                await self.simpleq.transport.delete_queue(self.name, queue_url)
-            except Exception as exc:
-                if not is_missing_queue_error(exc):
-                    raise
+        await self._delete_queue_with_stale_recovery(
+            queue_name=self.name,
+            cached_url=self._queue_url,
+        )
 
         if self.dlq_name is not None:
-            dlq_url = await self._queue_url_for_delete(self.dlq_name, self._dlq_url)
-            if dlq_url is not None:
-                try:
-                    await self.simpleq.transport.delete_queue(self.dlq_name, dlq_url)
-                except Exception as exc:
-                    if not is_missing_queue_error(exc):
-                        raise
+            await self._delete_queue_with_stale_recovery(
+                queue_name=self.dlq_name,
+                cached_url=self._dlq_url,
+            )
 
         invalidate = getattr(self.simpleq.transport, "invalidate_queue_url", None)
         if callable(invalidate):
@@ -826,6 +820,36 @@ class Queue:
             return await self.ensure_exists()
         return None
 
+    async def _delete_queue_with_stale_recovery(
+        self,
+        *,
+        queue_name: str,
+        cached_url: str | None,
+    ) -> None:
+        """Delete queue_name, retrying once when a stale URL is detected."""
+        queue_url = await self._queue_url_for_delete(queue_name, cached_url)
+        if queue_url is None:
+            return
+        try:
+            await self.simpleq.transport.delete_queue(queue_name, queue_url)
+            return
+        except Exception as exc:
+            if not is_missing_queue_error(exc):
+                raise
+
+        invalidate = getattr(self.simpleq.transport, "invalidate_queue_url", None)
+        if callable(invalidate):
+            invalidate(queue_name)
+
+        refreshed_url = await self._queue_url_for_delete(queue_name, None)
+        if refreshed_url is None or refreshed_url == queue_url:
+            return
+        try:
+            await self.simpleq.transport.delete_queue(queue_name, refreshed_url)
+        except Exception as exc:
+            if not is_missing_queue_error(exc):
+                raise
+
     async def _with_refreshed_queue_url(
         self,
         operation: str,
@@ -942,10 +966,7 @@ class Queue:
                 raise QueueValidationError(
                     "receive_request_attempt_id must be a non-empty string."
                 )
-            if (
-                len(receive_request_attempt_id)
-                > _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH
-            ):
+            if len(receive_request_attempt_id) > _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH:
                 raise QueueValidationError(
                     "receive_request_attempt_id must be 128 characters or fewer."
                 )
