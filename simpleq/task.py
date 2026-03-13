@@ -88,7 +88,16 @@ class TaskRegistry:
 
     def register(self, definition: TaskDefinition) -> None:
         """Register a task definition."""
-        self._definitions[definition.name] = definition
+        existing = self._definitions.get(definition.name)
+        if existing is None:
+            self._definitions[definition.name] = definition
+            return
+        if existing == definition:
+            return
+        raise InvalidTaskError(
+            f"Task '{definition.name}' is already registered with a different "
+            "definition."
+        )
 
     def get(self, task_name: str) -> TaskDefinition:
         """Return a task definition or import the callable if needed."""

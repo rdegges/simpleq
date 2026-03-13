@@ -147,6 +147,36 @@ def test_task_registry_preserves_task_handle_metadata() -> None:
         sys.modules.pop(module.__name__, None)
 
 
+def test_task_registry_allows_idempotent_duplicate_registration() -> None:
+    registry = TaskRegistry()
+    definition = TaskDefinition(
+        name=task_name_for(record_sync),
+        func=record_sync,
+        serializer="json",
+    )
+
+    registry.register(definition)
+    registry.register(definition)
+
+    assert registry.get(definition.name) is definition
+
+
+def test_task_registry_rejects_conflicting_duplicate_registration() -> None:
+    registry = TaskRegistry()
+    definition = TaskDefinition(
+        name=task_name_for(record_sync),
+        func=record_sync,
+    )
+    conflicting = TaskDefinition(
+        name=task_name_for(record_sync),
+        func=record_async,
+    )
+    registry.register(definition)
+
+    with pytest.raises(InvalidTaskError, match="already registered with a different"):
+        registry.register(conflicting)
+
+
 def test_import_task_callable_rejects_invalid_name() -> None:
     with pytest.raises(TaskNotRegisteredError):
         import_task_callable("invalid-name")

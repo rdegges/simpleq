@@ -123,6 +123,9 @@ Within a single `SimpleQ` instance, a queue name has one source of truth. If
 you call `sq.queue("emails", ...)` again later, keep the configuration aligned
 or reuse the original `queue` object directly; conflicting definitions now fail
 fast with `QueueValidationError` instead of silently reusing stale settings.
+Task registration follows the same principle: registering the same task name
+with a different definition now fails fast with `InvalidTaskError` so workers
+do not silently execute unexpected callables.
 String queue references used by `sq.task(queue=...)`, `sq.worker(queues=[...])`,
 and `sq.resolve_queue(...)` can be a queue name, queue URL, or SQS queue ARN.
 When a queue already exists in AWS, SimpleQ reconciles its SQS attributes and
