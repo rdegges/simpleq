@@ -476,7 +476,7 @@ class Queue:
 
     async def ack(self, job: Job) -> None:
         """Delete a processed message."""
-        if job.receipt_handle is None:
+        if not has_usable_receipt_handle(job.receipt_handle):
             return
         await self._with_refreshed_queue_url(
             "delete_message",
@@ -487,7 +487,7 @@ class Queue:
 
     async def change_visibility(self, job: Job, timeout_seconds: int) -> None:
         """Change the visibility timeout of a received message."""
-        if job.receipt_handle is None:
+        if not has_usable_receipt_handle(job.receipt_handle):
             return
         if not is_strict_int(timeout_seconds):
             raise QueueValidationError("visibility_timeout must be an integer.")
@@ -1047,6 +1047,11 @@ def normalize_receive_request_attempt_id(value: str | None) -> str | None:
             "receive_request_attempt_id must be a non-empty string."
         )
     return normalized
+
+
+def has_usable_receipt_handle(receipt_handle: str | None) -> bool:
+    """Return whether a message receipt handle is present and non-blank."""
+    return isinstance(receipt_handle, str) and bool(receipt_handle.strip())
 
 
 def string_metadata(value: Any) -> str | None:

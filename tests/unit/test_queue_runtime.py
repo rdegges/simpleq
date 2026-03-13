@@ -199,6 +199,42 @@ async def test_queue_ensure_exists_delete_and_purge(
 
 
 @pytest.mark.asyncio
+async def test_ack_ignores_blank_receipt_handle(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", wait_seconds=0)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="emails",
+        receipt_handle="   ",
+    )
+
+    await queue.ack(job)
+
+    assert simpleq_with_fake_transport.transport.deleted_messages == []
+
+
+@pytest.mark.asyncio
+async def test_change_visibility_ignores_blank_receipt_handle(
+    simpleq_with_fake_transport: SimpleQ,
+) -> None:
+    queue = simpleq_with_fake_transport.queue("emails", wait_seconds=0)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("a",),
+        kwargs={},
+        queue_name="emails",
+        receipt_handle="\t",
+    )
+
+    await queue.change_visibility(job, 5)
+
+    assert simpleq_with_fake_transport.transport.visibility_changes == []
+
+
+@pytest.mark.asyncio
 async def test_queue_enqueue_receive_and_iter_jobs(
     simpleq_with_fake_transport: SimpleQ,
 ) -> None:
