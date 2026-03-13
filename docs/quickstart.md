@@ -54,6 +54,8 @@ shutdown waits for in-flight jobs before cancellation.
 Worker runtime options are strict: `concurrency` must be an integer, while
 `poll_interval`, `receive_timeout_seconds`, and `graceful_shutdown_timeout`
 must be numeric values (booleans are rejected).
+Use `SIMPLEQ_POLL_INTERVAL` to set a global default polling interval across
+workers.
 
 Treat each queue name as a single definition per `SimpleQ` instance. Reuse the
 same `queue` object, or pass the same FIFO/DLQ/retry/timing settings each time

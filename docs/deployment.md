@@ -11,6 +11,7 @@ simpleq worker start -q emails -q orders.fifo --import-module myapp.tasks
 Recommended settings:
 
 - set `SIMPLEQ_CONCURRENCY` (must be `>= 1`)
+- tune `SIMPLEQ_POLL_INTERVAL` (seconds between empty polls, must be `>= 0`)
 - set `SIMPLEQ_REGION` for explicit per-service region control
 - keep `SIMPLEQ_BATCH_SIZE` between `1` and `10`
 - keep `SIMPLEQ_WAIT_SECONDS` between `0` and `20`

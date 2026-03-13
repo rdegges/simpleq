@@ -58,6 +58,7 @@ class SimpleQ:
         endpoint_url: str | None = None,
         batch_size: int | None = None,
         wait_seconds: int | None = None,
+        poll_interval: float | None = None,
         visibility_timeout: int | None = None,
         concurrency: int | None = None,
         graceful_shutdown_timeout: int | None = None,
@@ -78,6 +79,7 @@ class SimpleQ:
             endpoint_url=endpoint_url,
             batch_size=batch_size,
             wait_seconds=wait_seconds,
+            poll_interval=poll_interval,
             visibility_timeout=visibility_timeout,
             concurrency=concurrency,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
@@ -265,7 +267,7 @@ class SimpleQ:
         *,
         queues: Sequence[Queue | str],
         concurrency: int | None = None,
-        poll_interval: float = 1.0,
+        poll_interval: float | None = None,
         receive_timeout_seconds: float | None = None,
         graceful_shutdown_timeout: float | None = None,
     ) -> Worker:
@@ -277,7 +279,9 @@ class SimpleQ:
             concurrency=(
                 self.config.concurrency if concurrency is None else concurrency
             ),
-            poll_interval=poll_interval,
+            poll_interval=(
+                self.config.poll_interval if poll_interval is None else poll_interval
+            ),
             receive_timeout_seconds=receive_timeout_seconds,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
         )

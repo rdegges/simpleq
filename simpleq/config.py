@@ -203,6 +203,7 @@ class SimpleQConfig:
     endpoint_url: str | None = None
     batch_size: int = 10
     wait_seconds: int = 20
+    poll_interval: float = 1.0
     visibility_timeout: int = 300
     concurrency: int = 10
     graceful_shutdown_timeout: int = 30
@@ -224,6 +225,7 @@ class SimpleQConfig:
         endpoint_url: str | None = None,
         batch_size: int | None = None,
         wait_seconds: int | None = None,
+        poll_interval: float | None = None,
         visibility_timeout: int | None = None,
         concurrency: int | None = None,
         graceful_shutdown_timeout: int | None = None,
@@ -251,6 +253,11 @@ class SimpleQConfig:
         )
         config.wait_seconds = _coalesce_int(
             wait_seconds, "SIMPLEQ_WAIT_SECONDS", config.wait_seconds
+        )
+        config.poll_interval = _coalesce_float(
+            poll_interval,
+            "SIMPLEQ_POLL_INTERVAL",
+            config.poll_interval,
         )
         config.visibility_timeout = _coalesce_int(
             visibility_timeout,
@@ -330,6 +337,7 @@ def validate_config(config: SimpleQConfig) -> None:
         minimum=0,
         maximum=20,
     )
+    _validate_non_negative_float(name="poll_interval", value=config.poll_interval)
     _validate_int_range(
         name="visibility_timeout",
         value=config.visibility_timeout,

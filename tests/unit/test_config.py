@@ -239,12 +239,24 @@ def test_numeric_env_and_explicit_float_overrides(
 ) -> None:
     monkeypatch.setenv("SIMPLEQ_BATCH_SIZE", "8")
     monkeypatch.setenv("SIMPLEQ_SQS_PRICE_PER_MILLION", "0.9")
+    monkeypatch.setenv("SIMPLEQ_POLL_INTERVAL", "0.25")
     from_env = SimpleQConfig.from_overrides()
     assert from_env.batch_size == 8
     assert from_env.sqs_price_per_million == 0.9
+    assert from_env.poll_interval == 0.25
 
     explicit = SimpleQConfig.from_overrides(sqs_price_per_million=0.2)
     assert explicit.sqs_price_per_million == 0.2
+
+
+def test_from_overrides_prefers_explicit_poll_interval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_POLL_INTERVAL", "0.25")
+
+    config = SimpleQConfig.from_overrides(poll_interval=0.1)
+
+    assert config.poll_interval == 0.1
 
 
 def test_from_overrides_rejects_invalid_boolean_env(
@@ -288,6 +300,15 @@ def test_from_overrides_rejects_invalid_float_env_with_context(
     with pytest.raises(
         ValueError, match="Invalid float for SIMPLEQ_SQS_PRICE_PER_MILLION"
     ):
+        SimpleQConfig.from_overrides()
+
+
+def test_from_overrides_rejects_invalid_poll_interval_env_with_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_POLL_INTERVAL", "fast")
+
+    with pytest.raises(ValueError, match="Invalid float for SIMPLEQ_POLL_INTERVAL"):
         SimpleQConfig.from_overrides()
 
 

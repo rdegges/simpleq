@@ -118,6 +118,8 @@ shutdown waits for in-flight jobs before they are cancelled.
 Worker runtime options are validated strictly: `concurrency` must be an
 integer, while `poll_interval`, `receive_timeout_seconds`, and
 `graceful_shutdown_timeout` must be numeric values (booleans are rejected).
+Set `SIMPLEQ_POLL_INTERVAL` to tune the default worker poll cadence globally
+without changing application code.
 
 Within a single `SimpleQ` instance, a queue name has one source of truth. If
 you call `sq.queue("emails", ...)` again later, keep the configuration aligned
