@@ -366,6 +366,20 @@ def test_from_overrides_rejects_invalid_boolean_env(
         SimpleQConfig.from_overrides()
 
 
+def test_from_overrides_ignores_blank_boolean_env_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_COST_TRACKING", "   ")
+    monkeypatch.setenv("SIMPLEQ_ENABLE_METRICS", "")
+    monkeypatch.setenv("SIMPLEQ_ENABLE_TRACING", " ")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.enable_cost_tracking is True
+    assert config.enable_metrics is True
+    assert config.enable_tracing is False
+
+
 def test_from_overrides_rejects_invalid_integer_env_with_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

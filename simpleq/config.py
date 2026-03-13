@@ -44,6 +44,8 @@ def _bool_env(name: str) -> bool | None:
     if value is None:
         return None
     normalized = value.strip().lower()
+    if not normalized:
+        return None
     if normalized in {"1", "true", "yes", "on"}:
         return True
     if normalized in {"0", "false", "no", "off"}:
