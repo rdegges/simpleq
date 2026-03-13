@@ -167,6 +167,15 @@ class FakeBotoSQSClient:
 
     def send_message_batch(self, **kwargs: Any) -> dict[str, list[dict[str, str]]]:
         self.calls.append(("send_message_batch", kwargs))
+        queue_url = str(kwargs.get("QueueUrl", ""))
+        if queue_url.endswith("/bad-batch-failed-type"):
+            return {"Successful": self.batch_successful, "Failed": "invalid"}  # type: ignore[return-value]
+        if queue_url.endswith("/bad-batch-failed-item"):
+            return {"Successful": self.batch_successful, "Failed": ["invalid"]}  # type: ignore[list-item]
+        if queue_url.endswith("/bad-batch-successful-type"):
+            return {"Successful": "invalid", "Failed": []}  # type: ignore[return-value]
+        if queue_url.endswith("/bad-batch-successful-item"):
+            return {"Successful": ["invalid"], "Failed": []}  # type: ignore[list-item]
         return {
             "Successful": self.batch_successful,
             "Failed": self.batch_failed,
@@ -469,6 +478,60 @@ async def test_send_message_batch_raises_on_partial_failure(
                 {"Id": "1", "MessageBody": "{}"},
                 {"Id": "2", "MessageBody": "{bad-json"},
             ],
+        )
+
+
+@pytest.mark.asyncio
+async def test_send_message_batch_rejects_non_list_failed_payload(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="expected 'Failed' to be a list"):
+        await transport.send_message_batch(
+            "jobs",
+            "https://example.com/bad-batch-failed-type",
+            [{"Id": "1", "MessageBody": "{}"}],
+        )
+
+
+@pytest.mark.asyncio
+async def test_send_message_batch_rejects_non_mapping_failed_entries(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(
+        QueueError,
+        match="expected each entry in 'Failed' to be a mapping",
+    ):
+        await transport.send_message_batch(
+            "jobs",
+            "https://example.com/bad-batch-failed-item",
+            [{"Id": "1", "MessageBody": "{}"}],
+        )
+
+
+@pytest.mark.asyncio
+async def test_send_message_batch_rejects_non_list_successful_payload(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(QueueError, match="expected 'Successful' to be a list"):
+        await transport.send_message_batch(
+            "jobs",
+            "https://example.com/bad-batch-successful-type",
+            [{"Id": "1", "MessageBody": "{}"}],
+        )
+
+
+@pytest.mark.asyncio
+async def test_send_message_batch_rejects_non_mapping_successful_entries(
+    transport: SQSClient,
+) -> None:
+    with pytest.raises(
+        QueueError,
+        match="expected each entry in 'Successful' to be a mapping",
+    ):
+        await transport.send_message_batch(
+            "jobs",
+            "https://example.com/bad-batch-successful-item",
+            [{"Id": "1", "MessageBody": "{}"}],
         )
 
 

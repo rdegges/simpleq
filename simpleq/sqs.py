@@ -348,7 +348,12 @@ class SQSClient:
             QueueUrl=queue_url,
             Entries=entries,
         )
-        failed = list(response.get("Failed", []))
+        failed = response_list_of_mappings(
+            response,
+            "Failed",
+            queue_name=queue_name,
+            operation="send_message_batch",
+        )
         if failed:
             details = ", ".join(
                 f"{item.get('Id', '?')}:{item.get('Code', 'Unknown')}"
@@ -356,7 +361,12 @@ class SQSClient:
             )
             raise QueueBatchError(f"send_message_batch failed for entries: {details}")
 
-        successful = list(response.get("Successful", []))
+        successful = response_list_of_mappings(
+            response,
+            "Successful",
+            queue_name=queue_name,
+            operation="send_message_batch",
+        )
         ids_by_entry = {
             str(item["Id"]): str(item["MessageId"])
             for item in successful
@@ -538,3 +548,25 @@ def response_mapping(
             f"missing mapping '{key}'."
         )
     return value
+
+
+def response_list_of_mappings(
+    response: Mapping[str, Any],
+    key: str,
+    *,
+    queue_name: str,
+    operation: str,
+) -> list[Mapping[str, Any]]:
+    """Extract an optional list-of-mappings field from an AWS response payload."""
+    value = response.get(key, [])
+    if not isinstance(value, list):
+        raise QueueError(
+            f"{operation} for queue '{queue_name}' returned invalid response: "
+            f"expected '{key}' to be a list."
+        )
+    if not all(isinstance(item, Mapping) for item in value):
+        raise QueueError(
+            f"{operation} for queue '{queue_name}' returned invalid response: "
+            f"expected each entry in '{key}' to be a mapping."
+        )
+    return list(value)

@@ -47,3 +47,16 @@ Fix it with one of:
 - upgrade LocalStack to the latest stable release
 - disable or correct any custom SQS proxy/middleware that rewrites responses
 - verify your test double returns `{"Messages": [ ... ]}` with mapping entries
+
+## `QueueError` mentions an invalid `send_message_batch` response
+
+SimpleQ validates SQS `send_message_batch` payloads and expects both
+`Successful` and `Failed` to be lists of mapping entries. This usually means a
+custom test double, proxy, or outdated emulation layer returned a malformed
+batch response.
+
+Fix it with one of:
+
+- upgrade LocalStack to the latest stable release
+- verify your mock returns `{"Successful": [...], "Failed": [...]}` lists
+- remove middleware that rewrites SQS batch response structures
