@@ -35,6 +35,9 @@ All notable changes to SimpleQ are documented in this file.
 - `SimpleQConfig.from_overrides()` now treats blank
   `SIMPLEQ_RECEIVE_TIMEOUT_SECONDS` values as unset, avoiding startup failures
   from empty environment injection.
+- Numeric config env vars now treat blank values as unset defaults (instead of
+  raising parse errors), hardening startup in CI/container environments that
+  inject empty env entries.
 
 ## [2.0.0] - 2026-03-13
 

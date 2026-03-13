@@ -58,10 +58,10 @@ def _coalesce_int(explicit: int | None, env_name: str, default: int) -> int:
     if explicit is not None:
         return explicit
     value = os.getenv(env_name)
-    if value is None:
+    if value is None or not value.strip():
         return default
     try:
-        return int(value)
+        return int(value.strip())
     except ValueError as exc:
         raise ValueError(f"Invalid integer for {env_name}: {value!r}.") from exc
 
@@ -70,10 +70,10 @@ def _coalesce_float(explicit: float | None, env_name: str, default: float) -> fl
     if explicit is not None:
         return explicit
     value = os.getenv(env_name)
-    if value is None:
+    if value is None or not value.strip():
         return default
     try:
-        return float(value)
+        return float(value.strip())
     except ValueError as exc:
         raise ValueError(f"Invalid float for {env_name}: {value!r}.") from exc
 

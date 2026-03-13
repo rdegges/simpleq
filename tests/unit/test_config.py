@@ -250,6 +250,20 @@ def test_numeric_env_and_explicit_float_overrides(
     assert explicit.sqs_price_per_million == 0.2
 
 
+def test_from_overrides_ignores_blank_numeric_env_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_BATCH_SIZE", "   ")
+    monkeypatch.setenv("SIMPLEQ_POLL_INTERVAL", "")
+    monkeypatch.setenv("SIMPLEQ_SQS_PRICE_PER_MILLION", " ")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.batch_size == 10
+    assert config.poll_interval == 1.0
+    assert config.sqs_price_per_million == 0.40
+
+
 def test_from_overrides_reads_sqs_max_pool_connections(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
