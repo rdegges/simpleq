@@ -552,6 +552,23 @@ async def test_require_queue_url_raises(transport: SQSClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_purge_queue_surfaces_actionable_cooldown_error(
+    transport: SQSClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def purge_in_progress(**_: Any) -> dict[str, Any]:
+        raise ClientError(
+            {"Error": {"Code": "PurgeQueueInProgress"}},
+            "PurgeQueue",
+        )
+
+    monkeypatch.setattr(transport.client, "purge_queue", purge_in_progress)
+
+    with pytest.raises(QueueError, match="PurgeQueueInProgress"):
+        await transport.purge_queue("jobs", "https://example.com/jobs")
+
+
+@pytest.mark.asyncio
 async def test_list_queues_follows_pagination_tokens(transport: SQSClient) -> None:
     queues = await transport.list_queues("paged")
 

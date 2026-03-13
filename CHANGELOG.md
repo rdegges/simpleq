@@ -45,6 +45,9 @@ All notable changes to SimpleQ are documented in this file.
   eventual-consistency windows.
 - Worker shutdown now exits immediately after receive-task cancellation instead
   of waiting an extra `poll_interval`, improving stop latency for idle workers.
+- `SQSClient.purge_queue()` now maps AWS `PurgeQueueInProgress` failures to a
+  clear, actionable `QueueError`, making purge cooldown handling easier to
+  diagnose in production and CI runs.
 
 ## [2.0.0] - 2026-03-13
 

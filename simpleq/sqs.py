@@ -336,12 +336,21 @@ class SQSClient:
 
     async def purge_queue(self, queue_name: str, queue_url: str) -> None:
         """Purge all visible messages from a queue."""
-        await self._call(
-            queue_name,
-            "purge_queue",
-            "purge_queue",
-            QueueUrl=queue_url,
-        )
+        try:
+            await self._call(
+                queue_name,
+                "purge_queue",
+                "purge_queue",
+                QueueUrl=queue_url,
+            )
+        except ClientError as exc:
+            if client_error_code(exc) == "PurgeQueueInProgress":
+                raise QueueError(
+                    "PurgeQueueInProgress: queue "
+                    f"'{queue_name}' was purged recently. SQS allows one purge "
+                    "every 60 seconds per queue; wait and retry."
+                ) from exc
+            raise
 
     async def send_message(
         self,
