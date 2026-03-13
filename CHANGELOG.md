@@ -43,6 +43,8 @@ All notable changes to SimpleQ are documented in this file.
 - Queue deletion now retries once after stale-URL invalidation even when the
   refreshed queue URL string is unchanged, reducing false no-op deletes during
   eventual-consistency windows.
+- Worker shutdown now exits immediately after receive-task cancellation instead
+  of waiting an extra `poll_interval`, improving stop latency for idle workers.
 
 ## [2.0.0] - 2026-03-13
 

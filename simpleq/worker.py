@@ -110,6 +110,8 @@ class Worker:
                 self._in_flight_receives.difference_update(receive_tasks)
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
+            if self._stopping.is_set():
+                break
             if burst and not processed:
                 break
             if not processed:

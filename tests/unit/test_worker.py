@@ -786,6 +786,30 @@ async def test_worker_stop_cancels_in_flight_receive_tasks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_stop_does_not_wait_for_poll_interval_after_receive_cancel() -> (
+    None
+):
+    simpleq = SimpleQ()
+
+    class BlockingQueue(FakeQueue):
+        async def receive(
+            self, *, max_messages: int, visibility_timeout: int
+        ) -> list[Job]:
+            assert max_messages
+            assert visibility_timeout == self.visibility_timeout
+            await asyncio.Event().wait()
+            return []
+
+    queue = BlockingQueue(simpleq=simpleq, wait_seconds=20)
+    worker = Worker(simpleq, [queue], concurrency=1, poll_interval=5)
+
+    work_task = asyncio.create_task(worker.work())
+    await asyncio.sleep(0.02)
+    await worker.stop()
+    await asyncio.wait_for(work_task, timeout=0.2)
+
+
+@pytest.mark.asyncio
 async def test_worker_stop_cancels_stuck_in_flight_jobs_after_graceful_timeout() -> (
     None
 ):
