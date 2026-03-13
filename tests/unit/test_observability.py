@@ -8,6 +8,7 @@ from simpleq.observability import CostTracker, PrometheusMetrics, Timer, level_t
 def test_cost_tracker_aggregates_requests_and_cost() -> None:
     tracker = CostTracker(price_per_million=0.50)
     tracker.track_request("emails", "send_message", count=2)
+    tracker.track_request("emails", "send_message_batch")
     tracker.track_request("emails", "receive_message")
     tracker.job_enqueued("emails", count=2)
     tracker.job_completed("emails", duration_ms=25)
@@ -15,12 +16,12 @@ def test_cost_tracker_aggregates_requests_and_cost() -> None:
     tracker.job_decode_failed("emails")
     tracker.job_retried("emails")
     metrics = tracker.metrics_for("emails")
-    assert metrics.total_requests == 3
-    assert metrics.send_requests == 2
+    assert metrics.total_requests == 4
+    assert metrics.send_requests == 3
     assert metrics.receive_requests == 1
     assert metrics.jobs_enqueued == 2
     assert metrics.jobs_decode_failed == 1
-    assert tracker.total_cost() == 3 * (0.50 / 1_000_000)
+    assert tracker.total_cost() == 4 * (0.50 / 1_000_000)
     assert metrics.average_processing_time_ms == 25
     assert tracker.snapshot()["emails"]["jobs_processed"] == 1
 

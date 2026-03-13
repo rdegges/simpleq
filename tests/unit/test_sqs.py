@@ -237,6 +237,26 @@ async def test_get_queue_url_tracks_get_queue_url_operation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_send_message_batch_tracks_send_message_batch_operation() -> None:
+    fake = FakeBotoSQSClient()
+    tracker = SpyCostTracker()
+    transport = SQSClient(
+        SimpleQConfig.from_overrides(endpoint_url="http://localhost:4566"),
+        tracker,
+    )
+    transport._client = fake
+
+    ids = await transport.send_message_batch(
+        "jobs",
+        "https://example.com/jobs",
+        [{"Id": "1", "MessageBody": "{}"}],
+    )
+
+    assert ids == ["batch-1"]
+    assert tracker.calls == [("jobs", "send_message_batch", 1)]
+
+
+@pytest.mark.asyncio
 async def test_transport_happy_path_methods(transport: SQSClient) -> None:
     assert (
         await transport.ensure_queue(

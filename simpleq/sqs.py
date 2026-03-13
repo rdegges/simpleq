@@ -343,7 +343,7 @@ class SQSClient:
         """Send up to 10 messages in a batch."""
         response = await self._call(
             queue_name,
-            "send_message",
+            "send_message_batch",
             "send_message_batch",
             QueueUrl=queue_url,
             Entries=entries,

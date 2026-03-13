@@ -28,6 +28,7 @@ OperationName = Literal[
     "purge_queue",
     "receive_message",
     "send_message",
+    "send_message_batch",
     "set_queue_attributes",
     "tag_queue",
     "untag_queue",
@@ -100,7 +101,7 @@ class CostTracker:
         """Track SQS API request usage."""
         metrics = self.metrics_for(queue_name)
         metrics.total_requests += count
-        if operation == "send_message":
+        if operation in {"send_message", "send_message_batch"}:
             metrics.send_requests += count
         elif operation == "receive_message":
             metrics.receive_requests += count
