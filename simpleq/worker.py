@@ -29,6 +29,7 @@ class Worker:
         concurrency: int,
         poll_interval: float = 1.0,
         receive_timeout_seconds: float | None = None,
+        graceful_shutdown_timeout: float | None = None,
     ) -> None:
         resolved_queues = list(queues)
         if not resolved_queues:
@@ -47,13 +48,26 @@ class Worker:
             raise ValueError("receive_timeout_seconds must be a number.")
         if receive_timeout_seconds is not None and receive_timeout_seconds <= 0:
             raise ValueError("receive_timeout_seconds must be greater than 0.")
+        if graceful_shutdown_timeout is not None and not _is_strict_real(
+            graceful_shutdown_timeout
+        ):
+            raise ValueError("graceful_shutdown_timeout must be a number.")
+        if graceful_shutdown_timeout is not None and graceful_shutdown_timeout < 0:
+            raise ValueError("graceful_shutdown_timeout must be non-negative.")
         self.simpleq = simpleq
         self.queues = resolved_queues
         self.concurrency = concurrency
         self.poll_interval = poll_interval
         self.receive_timeout_seconds = receive_timeout_seconds
+        resolved_graceful_shutdown_timeout = (
+            simpleq.config.graceful_shutdown_timeout
+            if graceful_shutdown_timeout is None
+            else graceful_shutdown_timeout
+        )
+        self.graceful_shutdown_timeout = float(resolved_graceful_shutdown_timeout)
         self._stopping = asyncio.Event()
         self._in_flight_receives: set[asyncio.Task[tuple[Any, list[Job]]]] = set()
+        self._in_flight_jobs: set[asyncio.Task[None]] = set()
 
     async def work(self, *, burst: bool = False) -> None:
         """Poll configured queues until stopped."""
@@ -74,12 +88,15 @@ class Worker:
                             continue
                         raise
                     for job in jobs:
+                        if self._stopping.is_set():
+                            break
                         processed = True
-                        tasks.append(
-                            asyncio.create_task(
-                                self._process_job(queue, job, semaphore)
-                            )
+                        task = asyncio.create_task(
+                            self._process_job(queue, job, semaphore)
                         )
+                        self._in_flight_jobs.add(task)
+                        task.add_done_callback(self._in_flight_jobs.discard)
+                        tasks.append(task)
             finally:
                 for receive_task in receive_tasks:
                     if not receive_task.done():
@@ -87,7 +104,7 @@ class Worker:
                 await asyncio.gather(*receive_tasks, return_exceptions=True)
                 self._in_flight_receives.difference_update(receive_tasks)
             if tasks:
-                await asyncio.gather(*tasks)
+                await asyncio.gather(*tasks, return_exceptions=True)
             if burst and not processed:
                 break
             if not processed:
@@ -149,6 +166,25 @@ class Worker:
         self._stopping.set()
         for receive_task in list(self._in_flight_receives):
             receive_task.cancel()
+        if not self._in_flight_jobs:
+            return
+
+        done, pending = await asyncio.wait(
+            list(self._in_flight_jobs),
+            timeout=self.graceful_shutdown_timeout,
+        )
+        if not pending:
+            await asyncio.gather(*done, return_exceptions=True)
+            return
+
+        self.simpleq.logger.warning(
+            "worker_graceful_shutdown_timeout",
+            timeout_seconds=self.graceful_shutdown_timeout,
+            cancelled_jobs=len(pending),
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
     async def _process_job(
         self, queue: Any, job: Job, semaphore: asyncio.Semaphore

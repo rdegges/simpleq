@@ -107,9 +107,11 @@ sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
 For production workers polling remote SQS endpoints, you can set
 `receive_timeout_seconds` on `sq.worker(...)` to prevent a stuck
 `receive_message` call from stalling queue polling indefinitely.
+You can also tune `graceful_shutdown_timeout` per worker to control how long
+shutdown waits for in-flight jobs before they are cancelled.
 Worker runtime options are validated strictly: `concurrency` must be an
-integer, while `poll_interval` and `receive_timeout_seconds` must be numeric
-values (booleans are rejected).
+integer, while `poll_interval`, `receive_timeout_seconds`, and
+`graceful_shutdown_timeout` must be numeric values (booleans are rejected).
 
 Within a single `SimpleQ` instance, a queue name has one source of truth. If
 you call `sq.queue("emails", ...)` again later, keep the configuration aligned

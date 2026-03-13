@@ -72,6 +72,9 @@ def test_worker_rejects_invalid_runtime_options() -> None:
     ):
         Worker(simpleq, [queue], concurrency=1, receive_timeout_seconds=0)
 
+    with pytest.raises(ValueError, match="graceful_shutdown_timeout must be non-negative"):
+        Worker(simpleq, [queue], concurrency=1, graceful_shutdown_timeout=-1)
+
 
 def test_worker_rejects_non_strict_numeric_runtime_types() -> None:
     simpleq = SimpleQ()
@@ -103,6 +106,14 @@ def test_worker_rejects_non_strict_numeric_runtime_types() -> None:
             [queue],
             concurrency=1,
             receive_timeout_seconds=True,  # type: ignore[arg-type]
+        )
+
+    with pytest.raises(ValueError, match="graceful_shutdown_timeout must be a number"):
+        Worker(
+            simpleq,
+            [queue],
+            concurrency=1,
+            graceful_shutdown_timeout=True,  # type: ignore[arg-type]
         )
 
 
@@ -664,6 +675,58 @@ async def test_worker_stop_cancels_in_flight_receive_tasks() -> None:
     await asyncio.sleep(0.02)
     await worker.stop()
     await asyncio.wait_for(work_task, timeout=0.2)
+
+
+@pytest.mark.asyncio
+async def test_worker_stop_cancels_stuck_in_flight_jobs_after_graceful_timeout() -> (
+    None
+):
+    simpleq = SimpleQ(graceful_shutdown_timeout=1)
+
+    class OneJobThenEmptyQueue(FakeQueue):
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            self._returned = False
+
+        async def receive(
+            self, *, max_messages: int, visibility_timeout: int
+        ) -> list[Job]:
+            assert max_messages
+            assert visibility_timeout == self.visibility_timeout
+            if self._returned:
+                await asyncio.sleep(0.01)
+                return []
+            self._returned = True
+            return [
+                Job(
+                    task_name="tests.fixtures.tasks:record_sync",
+                    args=("hello",),
+                    kwargs={},
+                    queue_name=self.name,
+                )
+            ]
+
+    queue = OneJobThenEmptyQueue(simpleq=simpleq)
+    worker = Worker(
+        simpleq,
+        [queue],
+        concurrency=1,
+        poll_interval=0,
+        graceful_shutdown_timeout=0.01,
+    )
+    started = asyncio.Event()
+
+    async def blocked_invoke(_queue: Any, _job: Job) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    worker._invoke = blocked_invoke  # type: ignore[method-assign]
+
+    work_task = asyncio.create_task(worker.work())
+    await asyncio.wait_for(started.wait(), timeout=0.2)
+    await worker.stop()
+    await asyncio.wait_for(work_task, timeout=0.5)
+    assert queue.acked == []
 
 
 @pytest.mark.asyncio
