@@ -18,6 +18,8 @@ All notable changes to SimpleQ are documented in this file.
 - CLI, in-memory transport, queue, SQS, and worker tests cover more failure and
   helper branches so the quality gate matches the real repo state.
 - Quick-start snippets in the README and docs now run as complete scripts.
+- Worker retry metrics now report `failure` (instead of `dlq`) when retries are
+  exhausted on queues without DLQ support.
 
 ## [2.0.0] - 2026-03-13
 

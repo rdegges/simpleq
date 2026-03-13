@@ -185,6 +185,51 @@ async def test_worker_handles_retry_and_dlq() -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_exhausted_retry_without_dlq_records_failure_status() -> None:
+    simpleq = SimpleQ()
+    definition = TaskDefinition(
+        name=task_name_for(record_sync),
+        func=record_sync,
+        retry_exceptions=(RuntimeError,),
+    )
+    simpleq.registry.register(definition)
+
+    class NoDlqQueue(FakeQueue):
+        async def move_to_dlq(self, job: Job, *, error: str) -> None:
+            del error
+            await self.ack(job)
+
+    queue = NoDlqQueue(simpleq=simpleq)
+    worker = Worker(simpleq, [queue], concurrency=1)
+    exhausted = Job(
+        task_name=definition.name,
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+        receive_count=3,
+    )
+
+    await worker._handle_failure(queue, exhausted, RuntimeError("boom"))
+
+    assert queue.acked == [exhausted.job_id]
+    processed_samples = simpleq.metrics.jobs_processed.collect()[0].samples
+    assert any(
+        sample.name == "simpleq_jobs_processed_total"
+        and sample.labels.get("queue") == queue.name
+        and sample.labels.get("status") == "failure"
+        and sample.value == 1
+        for sample in processed_samples
+    )
+    assert not any(
+        sample.name == "simpleq_jobs_processed_total"
+        and sample.labels.get("queue") == queue.name
+        and sample.labels.get("status") == "dlq"
+        and sample.value > 0
+        for sample in processed_samples
+    )
+
+
+@pytest.mark.asyncio
 async def test_worker_handles_non_retryable_failure() -> None:
     simpleq = SimpleQ()
     definition = TaskDefinition(

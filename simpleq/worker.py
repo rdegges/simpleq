@@ -350,7 +350,7 @@ class Worker:
                 await queue.move_to_dlq(job, error=str(exc))
                 self.simpleq.metrics.record_processed(
                     queue.name,
-                    status="dlq",
+                    status="dlq" if queue_has_dlq(queue) else "failure",
                     duration_seconds=0.0,
                 )
                 return
