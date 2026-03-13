@@ -30,6 +30,8 @@ export SIMPLEQ_ENDPOINT_URL=http://localhost:4566
 SimpleQ also honors `AWS_ENDPOINT_URL_SQS` and `AWS_ENDPOINT_URL`, so teams can
 share one endpoint configuration across SimpleQ, boto3, the AWS CLI, and
 LocalStack tooling.
+If CI/container auto-detection is too aggressive for your environment, set
+`SIMPLEQ_AUTO_LOCALSTACK=false` to require explicit endpoint configuration.
 For region selection, set `SIMPLEQ_REGION` (preferred) or rely on
 `AWS_REGION` / `AWS_DEFAULT_REGION`.
 

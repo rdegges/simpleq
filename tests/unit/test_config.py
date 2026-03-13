@@ -85,6 +85,24 @@ def test_detect_localstack_uses_ci(monkeypatch: pytest.MonkeyPatch) -> None:
     assert detect_localstack_endpoint() == "http://localhost:4566"
 
 
+def test_detect_localstack_can_disable_auto_detection_in_ci(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("SIMPLEQ_AUTO_LOCALSTACK", "false")
+
+    assert detect_localstack_endpoint() is None
+
+
+def test_detect_localstack_rejects_invalid_auto_detection_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_AUTO_LOCALSTACK", "sometimes")
+
+    with pytest.raises(ValueError, match="Unsupported boolean value"):
+        detect_localstack_endpoint()
+
+
 def test_detect_localstack_uses_test_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SIMPLEQ_ENV", "test")
     assert detect_localstack_endpoint() == "http://localhost:4566"

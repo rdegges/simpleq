@@ -33,6 +33,9 @@ SimpleQ detects LocalStack from:
 - `SIMPLEQ_ENV=test`
 - a reachable `http://localhost:4566`
 
+If you run in CI but want to target real AWS instead of LocalStack inference,
+set `SIMPLEQ_AUTO_LOCALSTACK=false`.
+
 When an endpoint is configured, SimpleQ also treats loopback hosts (for example
 `127.0.0.1` and `::1`) plus LocalStack cloud aliases like
 `*.localhost.localstack.cloud` as local targets and automatically applies test

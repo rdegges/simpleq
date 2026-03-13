@@ -164,6 +164,10 @@ def detect_localstack_endpoint() -> str | None:
     if endpoint := resolve_endpoint_url_from_env():
         return endpoint
 
+    auto_localstack = _bool_env("SIMPLEQ_AUTO_LOCALSTACK")
+    if auto_localstack is False:
+        return None
+
     if hostname := os.getenv("LOCALSTACK_HOSTNAME"):
         return _localstack_endpoint_from_hostname(hostname)
 
