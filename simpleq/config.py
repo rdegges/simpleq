@@ -171,6 +171,9 @@ def detect_localstack_endpoint() -> str | None:
     if hostname := os.getenv("LOCALSTACK_HOSTNAME"):
         return _localstack_endpoint_from_hostname(hostname)
 
+    if hostname := os.getenv("LOCALSTACK_HOST"):
+        return _localstack_endpoint_from_hostname(hostname)
+
     env_name = os.getenv("SIMPLEQ_ENV", "").strip().lower()
     inside_docker = Path("/.dockerenv").exists()
 

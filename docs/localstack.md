@@ -29,6 +29,7 @@ SimpleQ detects LocalStack from:
 - `AWS_ENDPOINT_URL_SQS`
 - `AWS_ENDPOINT_URL`
 - `LOCALSTACK_HOSTNAME`
+- `LOCALSTACK_HOST`
 - `CI`
 - `SIMPLEQ_ENV=test`
 - a reachable `http://localhost:4566`

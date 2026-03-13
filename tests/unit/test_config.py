@@ -59,6 +59,14 @@ def test_detect_localstack_uses_localstack_hostname(
     assert detect_localstack_endpoint() == "http://localstack:4566"
 
 
+def test_detect_localstack_uses_localstack_host_when_hostname_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOCALSTACK_HOST", "localstack")
+
+    assert detect_localstack_endpoint() == "http://localstack:4566"
+
+
 @pytest.mark.parametrize(
     ("hostname", "expected"),
     [
@@ -78,6 +86,15 @@ def test_detect_localstack_normalizes_localstack_hostname_values(
     monkeypatch.setenv("LOCALSTACK_HOSTNAME", hostname)
 
     assert detect_localstack_endpoint() == expected
+
+
+def test_detect_localstack_prefers_hostname_over_localstack_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOCALSTACK_HOSTNAME", "https://preferred.localstack:8443")
+    monkeypatch.setenv("LOCALSTACK_HOST", "fallback.localstack:4566")
+
+    assert detect_localstack_endpoint() == "https://preferred.localstack:8443"
 
 
 def test_detect_localstack_uses_ci(monkeypatch: pytest.MonkeyPatch) -> None:
