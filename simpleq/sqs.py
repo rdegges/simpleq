@@ -378,11 +378,26 @@ class SQSClient:
             queue_name=queue_name,
             operation="send_message_batch",
         )
-        ids_by_entry = {
-            str(item["Id"]): str(item["MessageId"])
-            for item in successful
-            if "Id" in item and "MessageId" in item
-        }
+        ids_by_entry: dict[str, str] = {}
+        for item in successful:
+            entry_id = item.get("Id")
+            if not isinstance(entry_id, str) or not entry_id.strip():
+                raise QueueBatchError(
+                    "send_message_batch response contains an invalid entry id in "
+                    "'Successful'."
+                )
+            message_id = item.get("MessageId")
+            if not isinstance(message_id, str) or not message_id.strip():
+                raise QueueBatchError(
+                    "send_message_batch response contains an invalid message id in "
+                    "'Successful'."
+                )
+            if entry_id in ids_by_entry:
+                raise QueueBatchError(
+                    "send_message_batch response contains a duplicate success id: "
+                    f"{entry_id}."
+                )
+            ids_by_entry[entry_id] = message_id
         missing_entry_ids = [
             str(entry["Id"])
             for entry in entries

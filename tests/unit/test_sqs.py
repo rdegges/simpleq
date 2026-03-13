@@ -195,6 +195,18 @@ class FakeBotoSQSClient:
             return {"Successful": "invalid", "Failed": []}  # type: ignore[return-value]
         if queue_url.endswith("/bad-batch-successful-item"):
             return {"Successful": ["invalid"], "Failed": []}  # type: ignore[list-item]
+        if queue_url.endswith("/bad-batch-successful-empty-id"):
+            return {"Successful": [{"Id": "   ", "MessageId": "batch-1"}], "Failed": []}
+        if queue_url.endswith("/bad-batch-successful-empty-message-id"):
+            return {"Successful": [{"Id": "1", "MessageId": "   "}], "Failed": []}
+        if queue_url.endswith("/bad-batch-successful-duplicate-id"):
+            return {
+                "Successful": [
+                    {"Id": "1", "MessageId": "batch-1"},
+                    {"Id": "1", "MessageId": "batch-2"},
+                ],
+                "Failed": [],
+            }
         return {
             "Successful": self.batch_successful,
             "Failed": self.batch_failed,
@@ -572,6 +584,28 @@ async def test_send_message_batch_rejects_non_mapping_successful_entries(
         await transport.send_message_batch(
             "jobs",
             "https://example.com/bad-batch-successful-item",
+            [{"Id": "1", "MessageBody": "{}"}],
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("queue_url_suffix", "message"),
+    [
+        ("bad-batch-successful-empty-id", "invalid entry id"),
+        ("bad-batch-successful-empty-message-id", "invalid message id"),
+        ("bad-batch-successful-duplicate-id", "duplicate success id"),
+    ],
+)
+async def test_send_message_batch_rejects_invalid_success_entries(
+    transport: SQSClient,
+    queue_url_suffix: str,
+    message: str,
+) -> None:
+    with pytest.raises(QueueBatchError, match=message):
+        await transport.send_message_batch(
+            "jobs",
+            f"https://example.com/{queue_url_suffix}",
             [{"Id": "1", "MessageBody": "{}"}],
         )
 
