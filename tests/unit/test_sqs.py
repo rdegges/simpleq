@@ -441,6 +441,85 @@ async def test_ensure_queue_skips_tag_reconciliation_when_tags_unspecified(
 
 
 @pytest.mark.asyncio
+async def test_ensure_queue_recovers_from_stale_cached_url_during_attribute_reconcile(
+    transport: SQSClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport._queue_urls["emails"] = "https://example.com/stale-emails"
+
+    original = transport.client.set_queue_attributes
+
+    def flaky_set_queue_attributes(**kwargs: Any) -> dict[str, Any]:
+        queue_url = str(kwargs.get("QueueUrl", ""))
+        if queue_url.endswith("/stale-emails"):
+            raise ClientError(
+                {"Error": {"Code": "QueueDoesNotExist"}},
+                "SetQueueAttributes",
+            )
+        return original(**kwargs)
+
+    monkeypatch.setattr(
+        transport.client,
+        "set_queue_attributes",
+        flaky_set_queue_attributes,
+    )
+
+    url = await transport.ensure_queue(
+        "emails",
+        attributes={"VisibilityTimeout": "45"},
+    )
+
+    assert url == "https://example.com/emails"
+    assert transport._queue_urls["emails"] == "https://example.com/emails"
+    set_calls = [
+        payload
+        for call, payload in transport.client.calls
+        if call == "set_queue_attributes"
+    ]
+    assert [payload["QueueUrl"] for payload in set_calls] == [
+        "https://example.com/emails"
+    ]
+    assert ("get_queue_url", {"QueueName": "emails"}) in transport.client.calls
+
+
+@pytest.mark.asyncio
+async def test_ensure_queue_recovers_from_stale_cached_url_during_tag_reconcile(
+    transport: SQSClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport._queue_urls["emails"] = "https://example.com/stale-emails"
+    transport.client.tags_by_url["https://example.com/emails"] = {"owner": "legacy"}
+
+    original = transport.client.list_queue_tags
+
+    def flaky_list_queue_tags(*, QueueUrl: str) -> dict[str, Any]:
+        if QueueUrl.endswith("/stale-emails"):
+            raise ClientError(
+                {"Error": {"Code": "AWS.SimpleQueueService.NonExistentQueue"}},
+                "ListQueueTags",
+            )
+        return original(QueueUrl=QueueUrl)
+
+    monkeypatch.setattr(
+        transport.client,
+        "list_queue_tags",
+        flaky_list_queue_tags,
+    )
+
+    url = await transport.ensure_queue(
+        "emails",
+        tags={"env": "prod"},
+    )
+
+    assert url == "https://example.com/emails"
+    assert transport._queue_urls["emails"] == "https://example.com/emails"
+    assert transport.client.tags_by_url["https://example.com/emails"] == {
+        "env": "prod"
+    }
+    assert ("get_queue_url", {"QueueName": "emails"}) in transport.client.calls
+
+
+@pytest.mark.asyncio
 async def test_require_queue_url_raises(transport: SQSClient) -> None:
     with pytest.raises(QueueNotFoundError):
         await transport.require_queue_url("missing")

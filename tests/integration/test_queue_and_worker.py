@@ -212,6 +212,28 @@ async def test_delete_retries_after_queue_recreated_with_new_url(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_transport_ensure_queue_recovers_from_stale_cached_url(
+    simpleq_localstack,
+    unique_name,
+    cleanup_queues,
+) -> None:
+    queue = simpleq_localstack.queue(unique_name("transport-stale"), wait_seconds=0)
+    cleanup_queues.append(queue)
+    queue_url = await queue.ensure_exists()
+
+    simpleq_localstack.transport._queue_urls[queue.name] = f"{queue_url}-stale"
+
+    resolved_url = await simpleq_localstack.transport.ensure_queue(
+        queue.name,
+        attributes={"VisibilityTimeout": "2"},
+    )
+
+    assert resolved_url == queue_url
+    assert simpleq_localstack.transport._queue_urls[queue.name] == queue_url
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_worker_lazy_import_preserves_schema_metadata(
     localstack_endpoint: str,
     unique_name,

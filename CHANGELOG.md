@@ -20,6 +20,9 @@ All notable changes to SimpleQ are documented in this file.
 - Quick-start snippets in the README and docs now run as complete scripts.
 - Worker retry metrics now report `failure` (instead of `dlq`) when retries are
   exhausted on queues without DLQ support.
+- `SQSClient.ensure_queue()` now retries once with a refreshed queue URL when a
+  cached URL goes stale during attribute/tag reconciliation, reducing flakiness
+  after out-of-band queue deletion or recreation.
 
 ## [2.0.0] - 2026-03-13
 

@@ -786,3 +786,34 @@ async def test_live_change_visibility_rejects_invalid_timeout() -> None:
         await queue.ack(messages[0])
     finally:
         await queue.delete()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_live_transport_ensure_queue_recovers_from_stale_cached_url() -> None:
+    _load_dotenv(Path(".env"))
+    required = [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION",
+    ]
+    missing = [name for name in required if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Missing live AWS credentials: {', '.join(missing)}")
+
+    simpleq = _live_simpleq(wait_seconds=0, visibility_timeout=2)
+    queue = simpleq.queue(f"simpleq-live-transport-stale-{uuid4().hex[:8]}")
+
+    try:
+        queue_url = await queue.ensure_exists()
+        simpleq.transport._queue_urls[queue.name] = f"{queue_url}-stale"
+
+        resolved_url = await simpleq.transport.ensure_queue(
+            queue.name,
+            attributes={"VisibilityTimeout": "2"},
+        )
+
+        assert resolved_url == queue_url
+        assert simpleq.transport._queue_urls[queue.name] == queue_url
+    finally:
+        await queue.delete()

@@ -140,12 +140,43 @@ class SQSClient:
     ) -> str:
         """Return a queue URL, creating the queue if necessary."""
         if url := await self.get_queue_url(queue_name):
-            if attributes:
-                await self.set_queue_attributes(queue_name, url, attributes)
-            if tags is not None:
-                await self.reconcile_queue_tags(queue_name, url, tags)
-            return url
+            try:
+                await self._reconcile_existing_queue(
+                    queue_name,
+                    url,
+                    attributes=attributes,
+                    tags=tags,
+                )
+                return url
+            except ClientError as exc:
+                if client_error_code(exc) not in _MISSING_QUEUE_ERROR_CODES:
+                    raise
+
+            self.invalidate_queue_url(queue_name)
+            refreshed_url = await self.get_queue_url(queue_name)
+            if refreshed_url is not None:
+                await self._reconcile_existing_queue(
+                    queue_name,
+                    refreshed_url,
+                    attributes=attributes,
+                    tags=tags,
+                )
+                return refreshed_url
         return await self.create_queue(queue_name, attributes=attributes, tags=tags)
+
+    async def _reconcile_existing_queue(
+        self,
+        queue_name: str,
+        queue_url: str,
+        *,
+        attributes: dict[str, str] | None,
+        tags: dict[str, str] | None,
+    ) -> None:
+        """Apply desired attributes and tags to an existing queue URL."""
+        if attributes:
+            await self.set_queue_attributes(queue_name, queue_url, attributes)
+        if tags is not None:
+            await self.reconcile_queue_tags(queue_name, queue_url, tags)
 
     async def set_queue_attributes(
         self, queue_name: str, queue_url: str, attributes: dict[str, str]
