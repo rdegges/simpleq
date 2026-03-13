@@ -146,6 +146,7 @@ async def test_worker_handles_retry_and_dlq() -> None:
     )
     await worker._handle_failure(queue, exhausted, RuntimeError("boom"))
     assert queue.dlq_moves == ["boom"]
+    assert simpleq.cost_tracker.metrics_for(queue.name).jobs_retried == 1
 
 
 @pytest.mark.asyncio

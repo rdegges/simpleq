@@ -291,7 +291,6 @@ class Worker:
 
         should_retry = self._should_retry(definition, exc)
         if should_retry:
-            self.simpleq.cost_tracker.job_retried(queue.name)
             if job.receive_count >= effective_max_retries(queue, definition):
                 await queue.move_to_dlq(job, error=str(exc))
                 self.simpleq.metrics.record_processed(
@@ -301,6 +300,7 @@ class Worker:
                 )
                 return
             delay = self._retry_delay(queue, job.receive_count)
+            self.simpleq.cost_tracker.job_retried(queue.name)
             await queue.change_visibility(job, delay)
             self.simpleq.metrics.record_retry_delay(
                 queue.name,
