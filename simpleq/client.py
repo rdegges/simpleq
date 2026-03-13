@@ -302,12 +302,22 @@ class SimpleQ:
 
     async def list_queues(self, prefix: str | None = None) -> list[str]:
         """List SQS queue names, optionally filtered by prefix."""
-        urls = await self.transport.list_queues(prefix)
+        normalized_prefix = prefix.strip() if prefix is not None else None
+        if normalized_prefix == "":
+            normalized_prefix = None
+
+        urls = await self.transport.list_queues(normalized_prefix)
         names = [
             queue_name
             for url in urls
             if (queue_name := queue_name_from_reference(url)) is not None
         ]
+        if normalized_prefix is not None:
+            names = [
+                queue_name
+                for queue_name in names
+                if queue_name.startswith(normalized_prefix)
+            ]
         return sorted(dict.fromkeys(names))
 
     def list_queues_sync(self, prefix: str | None = None) -> list[str]:

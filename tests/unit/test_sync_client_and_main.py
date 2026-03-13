@@ -45,10 +45,10 @@ def test_simpleq_queue_cache_and_resolution(monkeypatch: pytest.MonkeyPatch) -> 
 
     async def fake_list(prefix: str | None) -> list[str]:
         assert prefix == "mail"
-        return ["https://sqs.aws/123/emails"]
+        return ["https://sqs.aws/123/mail-events"]
 
     monkeypatch.setattr(simpleq.transport, "list_queues", fake_list)
-    assert simpleq.list_queues_sync("mail") == ["emails"]
+    assert simpleq.list_queues_sync("mail") == ["mail-events"]
     assert simpleq.run_sync(asyncio.sleep(0, result="ok")) == "ok"
     with pytest.raises(QueueValidationError, match="queue must be a Queue instance"):
         simpleq.resolve_queue(object())
@@ -253,6 +253,44 @@ async def test_simpleq_list_queues_returns_sorted_unique_queue_names(
         "simpleq-test-b",
         "simpleq-test-c",
     ]
+
+
+@pytest.mark.asyncio
+async def test_simpleq_list_queues_filters_transport_results_by_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+
+    async def fake_list(prefix: str | None) -> list[str]:
+        assert prefix == "simpleq-test-"
+        return [
+            "https://sqs.aws/123/simpleq-test-a",
+            "https://sqs.aws/123/other-queue",
+            "https://sqs.aws/123/simpleq-test-b",
+        ]
+
+    monkeypatch.setattr(simpleq.transport, "list_queues", fake_list)
+
+    queues = await simpleq.list_queues("simpleq-test-")
+
+    assert queues == ["simpleq-test-a", "simpleq-test-b"]
+
+
+@pytest.mark.asyncio
+async def test_simpleq_list_queues_treats_blank_prefix_as_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+
+    async def fake_list(prefix: str | None) -> list[str]:
+        assert prefix is None
+        return ["https://sqs.aws/123/simpleq-test-a"]
+
+    monkeypatch.setattr(simpleq.transport, "list_queues", fake_list)
+
+    queues = await simpleq.list_queues("   ")
+
+    assert queues == ["simpleq-test-a"]
 
 
 @pytest.mark.asyncio

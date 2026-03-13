@@ -29,6 +29,9 @@ All notable changes to SimpleQ are documented in this file.
 - FIFO `message_group_id` / `deduplication_id` validation now rejects
   whitespace and unsupported characters up front, preventing runtime
   `SendMessage` failures from leaking out of AWS.
+- `SimpleQ.list_queues()` now normalizes blank prefixes and defensively
+  re-filters parsed queue names client-side, preventing unrelated queues from
+  leaking through non-compliant broker responses.
 
 ## [2.0.0] - 2026-03-13
 
