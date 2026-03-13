@@ -541,6 +541,44 @@ async def test_queue_delete_retries_with_refreshed_queue_url_after_stale_cache()
 
 
 @pytest.mark.asyncio
+async def test_queue_delete_retries_when_refreshed_url_matches_stale_url() -> None:
+    class SameUrlRefreshingDeleteTransport(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.cache_invalidated = False
+            self.get_queue_url_calls = 0
+            self.delete_calls = 0
+
+        async def get_queue_url(self, queue_name: str) -> str | None:
+            del queue_name
+            self.get_queue_url_calls += 1
+            return "https://example.com/emails"
+
+        async def delete_queue(self, queue_name: str, queue_url: str) -> None:
+            self.delete_calls += 1
+            if self.delete_calls == 1:
+                raise QueueNotFoundError("Queue URL is stale.")
+            await super().delete_queue(queue_name, queue_url)
+
+        def invalidate_queue_url(self, queue_name: str) -> None:
+            del queue_name
+            self.cache_invalidated = True
+
+    simpleq = SimpleQ()
+    transport = SameUrlRefreshingDeleteTransport()
+    simpleq.transport = transport
+    queue = simpleq.queue("emails", wait_seconds=0)
+
+    await queue.delete()
+
+    assert transport.deleted == ["emails"]
+    assert transport.delete_calls == 2
+    assert transport.get_queue_url_calls == 2
+    assert transport.cache_invalidated is True
+    assert transport.ensured == []
+
+
+@pytest.mark.asyncio
 async def test_queue_delete_treats_missing_queue_errors_from_get_queue_url_as_noop() -> (
     None
 ):

@@ -38,6 +38,9 @@ All notable changes to SimpleQ are documented in this file.
 - Numeric config env vars now treat blank values as unset defaults (instead of
   raising parse errors), hardening startup in CI/container environments that
   inject empty env entries.
+- Queue deletion now retries once after stale-URL invalidation even when the
+  refreshed queue URL string is unchanged, reducing false no-op deletes during
+  eventual-consistency windows.
 
 ## [2.0.0] - 2026-03-13
 

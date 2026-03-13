@@ -866,7 +866,7 @@ class Queue:
             invalidate(queue_name)
 
         refreshed_url = await self._queue_url_for_delete(queue_name, None)
-        if refreshed_url is None or refreshed_url == queue_url:
+        if refreshed_url is None:
             return
         try:
             await self.simpleq.transport.delete_queue(queue_name, refreshed_url)
