@@ -197,13 +197,24 @@ class SQSClient:
                 "list_queues",
                 **request,
             )
-            queue_urls.extend(str(item) for item in response.get("QueueUrls", []))
+            queue_urls.extend(
+                response_list_of_non_empty_strings(
+                    response,
+                    "QueueUrls",
+                    queue_name=prefix or "global",
+                    operation="list_queues",
+                )
+            )
 
-            raw_token = response.get("NextToken")
-            if raw_token is None:
+            token = response_optional_non_empty_string(
+                response,
+                "NextToken",
+                queue_name=prefix or "global",
+                operation="list_queues",
+            )
+            if token is None:
                 break
-            token = str(raw_token).strip()
-            if not token or token in seen_tokens:
+            if token in seen_tokens:
                 break
             seen_tokens.add(token)
             next_token = token
@@ -570,3 +581,50 @@ def response_list_of_mappings(
             f"expected each entry in '{key}' to be a mapping."
         )
     return list(value)
+
+
+def response_list_of_non_empty_strings(
+    response: Mapping[str, Any],
+    key: str,
+    *,
+    queue_name: str,
+    operation: str,
+) -> list[str]:
+    """Extract an optional list containing non-empty strings."""
+    value = response.get(key, [])
+    if not isinstance(value, list):
+        raise QueueError(
+            f"{operation} for queue '{queue_name}' returned invalid response: "
+            f"expected '{key}' to be a list."
+        )
+    if not all(isinstance(item, str) and item.strip() for item in value):
+        raise QueueError(
+            f"{operation} for queue '{queue_name}' returned invalid response: "
+            f"expected each entry in '{key}' to be a non-empty string."
+        )
+    return list(value)
+
+
+def response_optional_non_empty_string(
+    response: Mapping[str, Any],
+    key: str,
+    *,
+    queue_name: str,
+    operation: str,
+) -> str | None:
+    """Extract an optional non-empty string field from an AWS response payload."""
+    value = response.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise QueueError(
+            f"{operation} for queue '{queue_name}' returned invalid response: "
+            f"expected '{key}' to be a string."
+        )
+    normalized = value.strip()
+    if not normalized:
+        raise QueueError(
+            f"{operation} for queue '{queue_name}' returned invalid response: "
+            f"'{key}' must not be empty when provided."
+        )
+    return normalized

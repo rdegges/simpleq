@@ -60,3 +60,15 @@ Fix it with one of:
 - upgrade LocalStack to the latest stable release
 - verify your mock returns `{"Successful": [...], "Failed": [...]}` lists
 - remove middleware that rewrites SQS batch response structures
+
+## `QueueError` mentions an invalid `list_queues` response
+
+SimpleQ validates SQS `list_queues` payloads and expects `QueueUrls` to be a
+list of non-empty strings and `NextToken` to be a non-empty string when
+present. This usually indicates a malformed emulator/proxy response.
+
+Fix it with one of:
+
+- upgrade LocalStack to the latest stable release
+- ensure your test double returns `{"QueueUrls": ["..."], "NextToken": "..."}` shapes
+- remove middleware that rewrites queue listing payloads

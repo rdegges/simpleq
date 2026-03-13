@@ -51,6 +51,18 @@ class FakeBotoSQSClient:
                 "QueueUrls": ["https://example.com/loop-2"],
                 "NextToken": "loop-token",
             },
+            "bad-queue-urls-type:first": {"QueueUrls": "not-a-list"},
+            "bad-queue-urls-item:first": {
+                "QueueUrls": ["https://example.com/ok", 123]
+            },
+            "bad-next-token-type:first": {
+                "QueueUrls": ["https://example.com/ok"],
+                "NextToken": 123,
+            },
+            "bad-next-token-empty:first": {
+                "QueueUrls": ["https://example.com/ok"],
+                "NextToken": "   ",
+            },
         }
 
     def get_queue_url(self, *, QueueName: str) -> dict[str, str]:
@@ -123,7 +135,14 @@ class FakeBotoSQSClient:
         )
         if QueueNamePrefix == "empty":
             return {}
-        if QueueNamePrefix in {"paged", "loop"}:
+        if QueueNamePrefix in {
+            "paged",
+            "loop",
+            "bad-queue-urls-type",
+            "bad-queue-urls-item",
+            "bad-next-token-type",
+            "bad-next-token-empty",
+        }:
             page_key = f"{QueueNamePrefix}:{NextToken or 'first'}"
             return dict(self.list_queue_pages.get(page_key, {}))
         return {"QueueUrls": ["https://example.com/emails"]}
@@ -444,6 +463,28 @@ async def test_list_queues_stops_on_repeated_next_token(transport: SQSClient) ->
         if call == "list_queues" and payload["QueueNamePrefix"] == "loop"
     ]
     assert len(list_calls) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("prefix", "message"),
+    [
+        ("bad-queue-urls-type", "expected 'QueueUrls' to be a list"),
+        (
+            "bad-queue-urls-item",
+            "expected each entry in 'QueueUrls' to be a non-empty string",
+        ),
+        ("bad-next-token-type", "expected 'NextToken' to be a string"),
+        ("bad-next-token-empty", "must not be empty when provided"),
+    ],
+)
+async def test_list_queues_with_malformed_response_raises_queue_error(
+    transport: SQSClient,
+    prefix: str,
+    message: str,
+) -> None:
+    with pytest.raises(QueueError, match=message):
+        await transport.list_queues(prefix)
 
 
 @pytest.mark.asyncio
