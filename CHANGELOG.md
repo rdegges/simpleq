@@ -26,6 +26,9 @@ All notable changes to SimpleQ are documented in this file.
 - `SimpleQConfig.from_overrides()` now ignores whitespace-only
   `SIMPLEQ_DEFAULT_QUEUE` values and falls back to `default`, preventing boot
   failures from blank environment injection.
+- FIFO `message_group_id` / `deduplication_id` validation now rejects
+  whitespace and unsupported characters up front, preventing runtime
+  `SendMessage` failures from leaking out of AWS.
 
 ## [2.0.0] - 2026-03-13
 

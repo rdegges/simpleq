@@ -19,6 +19,7 @@ Rules to remember:
 - every message needs a `message_group_id`
 - if content-based deduplication is disabled, every message also needs a `deduplication_id`
 - `message_group_id` and `deduplication_id` must be non-empty strings with at most 128 characters
+- FIFO routing IDs may only include letters, numbers, and punctuation (no spaces, tabs, or newlines)
 - SimpleQ preserves FIFO routing metadata when a message is received, moved to a
   DLQ, or redriven back to the primary queue
 - redriven FIFO messages get a fresh internal deduplication ID so AWS does not

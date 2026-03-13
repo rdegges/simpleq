@@ -263,7 +263,9 @@ def test_dlq_queue_requires_dlq_support() -> None:
     ("message_group_id", "deduplication_id", "message"),
     [
         ("", "dedup", "message_group_id must be a non-empty string"),
+        ("   ", "dedup", "message_group_id must be a non-empty string"),
         ("group", "", "deduplication_id must be a non-empty string"),
+        ("group", "   ", "deduplication_id must be a non-empty string"),
         ("g" * 129, "dedup", "message_group_id must be 128 characters or fewer"),
         ("group", "d" * 129, "deduplication_id must be 128 characters or fewer"),
     ],
@@ -300,6 +302,32 @@ def test_queue_rejects_non_string_fifo_routing_identifiers() -> None:
             delay_seconds=0,
             message_group_id="group",
             deduplication_id=456,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    ("message_group_id", "deduplication_id"),
+    [
+        ("group with spaces", "dedup"),
+        ("group", "dedup with spaces"),
+        ("group\tid", "dedup"),
+        ("group", "dedup\nid"),
+    ],
+)
+def test_queue_rejects_fifo_routing_identifiers_with_invalid_characters(
+    message_group_id: str,
+    deduplication_id: str,
+) -> None:
+    queue = SimpleQ().queue("orders.fifo", fifo=True, dlq=True)
+
+    with pytest.raises(
+        QueueValidationError,
+        match="may only contain letters, numbers, and punctuation",
+    ):
+        queue._validate_message_options(
+            delay_seconds=0,
+            message_group_id=message_group_id,
+            deduplication_id=deduplication_id,
         )
 
 
@@ -474,6 +502,26 @@ async def test_enqueue_rejects_explicit_empty_fifo_ids_without_metadata_fallback
         match="deduplication_id must be a non-empty string",
     ):
         await queue.enqueue(job, message_group_id="manual-group", deduplication_id="")
+
+    with pytest.raises(
+        QueueValidationError,
+        match="message_group_id must be a non-empty string",
+    ):
+        await queue.enqueue(
+            job,
+            message_group_id="   ",
+            deduplication_id="manual-dedup",
+        )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="deduplication_id must be a non-empty string",
+    ):
+        await queue.enqueue(
+            job,
+            message_group_id="manual-group",
+            deduplication_id="   ",
+        )
 
 
 @pytest.mark.asyncio

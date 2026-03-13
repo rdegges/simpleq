@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import string
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, TypeVar
 from uuid import uuid4
@@ -35,6 +36,11 @@ _MAX_MESSAGE_ATTRIBUTE_NAME_LENGTH = 256
 _MAX_MESSAGE_ATTRIBUTE_VALUE_BYTES = 1_048_576
 _MAX_MESSAGE_SIZE_BYTES = 1_048_576
 _MAX_FIFO_ROUTING_ID_LENGTH = 128
+_ALLOWED_FIFO_ROUTING_ID_CHARACTERS = frozenset(
+    string.ascii_letters
+    + string.digits
+    + r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""
+)
 _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH = 128
 _MAX_DLQ_MAX_RECEIVE_COUNT = 1000
 _MAX_QUEUE_TAGS = 50
@@ -1183,11 +1189,15 @@ def validate_fifo_routing_identifier(
         return
     if not isinstance(value, str):
         raise QueueValidationError(f"{name} must be a string when set.")
-    if len(value) == 0:
+    if len(value.strip()) == 0:
         raise QueueValidationError(f"{name} must be a non-empty string when set.")
     if len(value) > _MAX_FIFO_ROUTING_ID_LENGTH:
         raise QueueValidationError(
             f"{name} must be {_MAX_FIFO_ROUTING_ID_LENGTH} characters or fewer."
+        )
+    if any(char not in _ALLOWED_FIFO_ROUTING_ID_CHARACTERS for char in value):
+        raise QueueValidationError(
+            f"{name} may only contain letters, numbers, and punctuation."
         )
 
 
