@@ -547,6 +547,46 @@ def test_from_overrides_normalizes_default_queue_name_whitespace(
     assert config.default_queue_name == "events.fifo"
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("https://sqs.us-east-1.amazonaws.com/123456789012/events", "events"),
+        (
+            "https://sqs.us-east-1.amazonaws.com/123456789012/orders%2Efifo",
+            "orders.fifo",
+        ),
+        ("arn:aws:sqs:us-east-1:123456789012:emails", "emails"),
+        ("arn:aws-us-gov:sqs:us-gov-west-1:123456789012:events.fifo", "events.fifo"),
+    ],
+)
+def test_from_overrides_normalizes_default_queue_reference_env(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+    expected: str,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_DEFAULT_QUEUE", value)
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.default_queue_name == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("https://sqs.us-east-1.amazonaws.com/123456789012/events", "events"),
+        ("arn:aws:sqs:us-east-1:123456789012:events.fifo", "events.fifo"),
+    ],
+)
+def test_from_overrides_normalizes_explicit_default_queue_reference(
+    value: str,
+    expected: str,
+) -> None:
+    config = SimpleQConfig.from_overrides(default_queue_name=value)
+
+    assert config.default_queue_name == expected
+
+
 def test_from_overrides_ignores_blank_default_queue_name_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -576,6 +616,23 @@ def test_from_overrides_rejects_explicit_empty_default_queue_name(
     ],
 )
 def test_from_overrides_rejects_invalid_default_queue_name(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_DEFAULT_QUEUE", value)
+
+    with pytest.raises(ValueError, match="default_queue_name"):
+        SimpleQConfig.from_overrides()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "https://sqs.us-east-1.amazonaws.com/123456789012/not valid",
+        "arn:aws:sqs:us-east-1:123456789012:",
+    ],
+)
+def test_from_overrides_rejects_invalid_default_queue_reference(
     monkeypatch: pytest.MonkeyPatch,
     value: str,
 ) -> None:

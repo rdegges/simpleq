@@ -75,9 +75,12 @@ When you need idempotent FIFO receive retries after transient network failures,
 pass `receive_request_attempt_id="..."` to `queue.receive(...)` to forward SQS
 `ReceiveRequestAttemptId`.
 
-You can set `default_queue_name` (or `SIMPLEQ_DEFAULT_QUEUE`) to either a
-standard queue (for example `jobs`) or FIFO queue (for example `jobs.fifo`).
-SimpleQ infers queue type from the suffix when resolving the default queue.
+You can set `default_queue_name` (or `SIMPLEQ_DEFAULT_QUEUE`) to a queue name,
+queue URL, or SQS queue ARN. Example values: `jobs`, `jobs.fifo`,
+`https://sqs.us-east-1.amazonaws.com/123456789012/jobs`, or
+`arn:aws:sqs:us-east-1:123456789012:jobs.fifo`.
+SimpleQ normalizes references to queue names and infers queue type from the
+`.fifo` suffix when resolving the default queue.
 
 ## Quick Start
 

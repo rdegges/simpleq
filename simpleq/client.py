@@ -9,13 +9,13 @@ from typing import (
     TypeVar,
     cast,
 )
-from urllib.parse import unquote, urlparse
 
 from simpleq._sync import run_sync
 from simpleq.config import BackoffStrategy, SimpleQConfig
 from simpleq.exceptions import InvalidTaskError, QueueValidationError
 from simpleq.observability import CostTracker, PrometheusMetrics, configure_logging
-from simpleq.queue import Queue, normalize_queue_name
+from simpleq.queue import Queue
+from simpleq.references import queue_name_from_reference
 from simpleq.sqs import SQSClient
 from simpleq.task import TaskDefinition, TaskHandle, TaskRegistry, task_name_for
 from simpleq.worker import Worker
@@ -331,48 +331,6 @@ class SimpleQ:
         return run_sync(awaitable)
 
 
-def queue_name_from_reference(reference: str) -> str | None:
-    """Extract a queue name from either a URL or queue-name-like reference."""
-    normalized = reference.strip()
-    if not normalized:
-        return None
-    if normalized.startswith("arn:"):
-        return _queue_name_from_arn(normalized)
-    if "://" not in normalized:
-        candidate = normalized.rstrip("/").rsplit("/", 1)[-1]
-        return _validated_queue_name(candidate)
-
-    parsed = urlparse(normalized)
-    if parsed.scheme not in {"http", "https"}:
-        return None
-    path = parsed.path.rstrip("/")
-    if not path:
-        return None
-    queue_name = unquote(path.rsplit("/", 1)[-1])
-    return _validated_queue_name(queue_name)
-
-
 def _looks_like_queue_reference(reference: str) -> bool:
     """Return whether ``reference`` appears to be a queue URL or ARN."""
     return reference.startswith("arn:") or "://" in reference
-
-
-def _validated_queue_name(candidate: str) -> str | None:
-    """Return a normalized queue name or ``None`` when the candidate is invalid."""
-    if not candidate:
-        return None
-    try:
-        return normalize_queue_name(candidate, fifo=candidate.endswith(".fifo"))
-    except QueueValidationError:
-        return None
-
-
-def _queue_name_from_arn(arn: str) -> str | None:
-    """Extract an SQS queue name from a queue ARN."""
-    parts = arn.split(":", 5)
-    if len(parts) != 6:
-        return None
-    _arn, _partition, service, _region, _account_id, resource = parts
-    if service != "sqs":
-        return None
-    return _validated_queue_name(resource)

@@ -55,6 +55,10 @@ All notable changes to SimpleQ are documented in this file.
   `ack_error` outcomes (with actionable `queue_ack_failed` logs) instead of
   generic `failure_handler_error`, improving production diagnostics and metric
   accuracy.
+- `default_queue_name` / `SIMPLEQ_DEFAULT_QUEUE` now accept queue names, SQS
+  queue URLs, and SQS queue ARNs (normalized to queue names at config load),
+  which simplifies deploying workers from infrastructure outputs without manual
+  string rewriting.
 
 ## [2.0.0] - 2026-03-13
 

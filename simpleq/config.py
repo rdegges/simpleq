@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from simpleq.exceptions import QueueValidationError
 from simpleq.queue import normalize_queue_name
+from simpleq.references import queue_name_from_reference
 
 BackoffStrategy = Literal["constant", "linear", "exponential", "exponential_jitter"]
 
@@ -406,9 +407,13 @@ def validate_config(config: SimpleQConfig) -> None:
         _validate_endpoint_url(config.endpoint_url)
     if not isinstance(config.default_queue_name, str):
         raise ValueError("default_queue_name must be a string.")
-    normalized_default_queue_name = config.default_queue_name.strip()
-    if not normalized_default_queue_name:
+    normalized_default_queue_reference = config.default_queue_name.strip()
+    if not normalized_default_queue_reference:
         raise ValueError("default_queue_name must be non-empty.")
+    normalized_default_queue_name = (
+        queue_name_from_reference(normalized_default_queue_reference)
+        or normalized_default_queue_reference
+    )
     try:
         normalize_queue_name(
             normalized_default_queue_name,

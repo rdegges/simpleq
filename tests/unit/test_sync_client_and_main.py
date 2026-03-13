@@ -70,6 +70,34 @@ def test_simpleq_resolve_queue_none_supports_fifo_default_queue() -> None:
     assert resolved.fifo is True
 
 
+@pytest.mark.parametrize(
+    ("reference", "expected_name", "expected_fifo"),
+    [
+        (
+            "https://sqs.us-east-1.amazonaws.com/123456789012/default-jobs",
+            "default-jobs",
+            False,
+        ),
+        (
+            "arn:aws:sqs:us-east-1:123456789012:events.fifo",
+            "events.fifo",
+            True,
+        ),
+    ],
+)
+def test_simpleq_resolve_queue_none_supports_default_queue_references(
+    reference: str,
+    expected_name: str,
+    expected_fifo: bool,
+) -> None:
+    simpleq = SimpleQ(default_queue_name=reference, transport=InMemoryTransport())
+
+    resolved = simpleq.resolve_queue(None)
+
+    assert resolved.name == expected_name
+    assert resolved.fifo is expected_fifo
+
+
 def test_simpleq_queue_uses_client_default_max_retries() -> None:
     simpleq = SimpleQ(max_retries=7, transport=InMemoryTransport())
 
