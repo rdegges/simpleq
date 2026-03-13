@@ -14,6 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 _FIFO_DEDUPLICATION_WINDOW_SECONDS = 300.0
+_RECEIVE_ATTEMPT_ID_WINDOW_SECONDS = 300.0
 
 
 @dataclass(slots=True)
@@ -39,6 +40,9 @@ class _StoredQueue:
     tags: dict[str, str] = field(default_factory=dict)
     messages: list[_StoredMessage] = field(default_factory=list)
     deduplication_cache: dict[str, tuple[float, str]] = field(default_factory=dict)
+    receive_attempt_cache: dict[str, tuple[float, list[dict[str, Any]]]] = field(
+        default_factory=dict
+    )
 
     @property
     def url(self) -> str:
@@ -159,6 +163,7 @@ class InMemoryTransport:
         queue = self._require_queue(queue_name)
         queue.messages.clear()
         queue.deduplication_cache.clear()
+        queue.receive_attempt_cache.clear()
 
     async def send_message(
         self,
@@ -232,18 +237,29 @@ class InMemoryTransport:
         receive_request_attempt_id: str | None = None,
     ) -> list[dict[str, Any]]:
         del queue_url
-        del receive_request_attempt_id
         queue = self._require_queue(queue_name)
+        now = time.monotonic()
+        self._purge_expired_receive_attempt_entries(queue, now=now)
+        if receive_request_attempt_id is not None:
+            cached = queue.receive_attempt_cache.get(receive_request_attempt_id)
+            if cached is not None:
+                _, messages = cached
+                return self._clone_received_messages(messages)
         timeout = self._effective_visibility_timeout(
             queue, visibility_timeout=visibility_timeout
         )
-        deadline = time.monotonic() + max(wait_seconds, 0)
+        deadline = now + max(wait_seconds, 0)
         while True:
             received = self._receive_visible_messages(
                 queue,
                 max_messages=max_messages,
                 visibility_timeout=timeout,
             )
+            if receive_request_attempt_id is not None:
+                queue.receive_attempt_cache[receive_request_attempt_id] = (
+                    time.monotonic() + _RECEIVE_ATTEMPT_ID_WINDOW_SECONDS,
+                    self._clone_received_messages(received),
+                )
             if received:
                 return received
             remaining = deadline - time.monotonic()
@@ -261,6 +277,7 @@ class InMemoryTransport:
             for message in queue.messages
             if message.receipt_handle != receipt_handle
         ]
+        queue.receive_attempt_cache.clear()
 
     async def change_message_visibility(
         self,
@@ -274,6 +291,7 @@ class InMemoryTransport:
         for message in queue.messages:
             if message.receipt_handle == receipt_handle:
                 message.visible_at = time.monotonic() + timeout_seconds
+                queue.receive_attempt_cache.clear()
                 return
 
     def _require_queue(self, queue_name: str) -> _StoredQueue:
@@ -342,6 +360,29 @@ class InMemoryTransport:
             for key, value in queue.deduplication_cache.items()
             if value[0] > now
         }
+
+    @staticmethod
+    def _purge_expired_receive_attempt_entries(
+        queue: _StoredQueue, *, now: float
+    ) -> None:
+        queue.receive_attempt_cache = {
+            key: value
+            for key, value in queue.receive_attempt_cache.items()
+            if value[0] > now
+        }
+
+    @staticmethod
+    def _clone_received_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "Body": str(message["Body"]),
+                "ReceiptHandle": str(message["ReceiptHandle"]),
+                "MessageId": str(message["MessageId"]),
+                "Attributes": dict(message["Attributes"]),
+                "MessageAttributes": dict(message["MessageAttributes"]),
+            }
+            for message in messages
+        ]
 
     @staticmethod
     def _deduplication_key(

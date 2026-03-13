@@ -20,6 +20,8 @@ queue = sq.queue("emails")
 - when `content_based_deduplication=True`, duplicate message bodies are deduplicated
 - once a FIFO message group has an in-flight message, later messages in that
   group stay hidden until the earlier message is acked or its visibility expires
+- FIFO `receive_request_attempt_id` retries replay the same receive result for
+  5 minutes unless message state changes (ack/visibility updates/purge)
 - `receive(..., wait_seconds=...)` now long-polls for delayed messages instead of
   returning early when a message becomes visible during the poll window
 

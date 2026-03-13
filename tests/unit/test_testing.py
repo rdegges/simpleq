@@ -177,3 +177,91 @@ async def test_inmemory_transport_long_poll_waits_for_delayed_message() -> None:
 
     assert [job.args[0] for job in received] == ["delayed"]
     assert elapsed >= 0.8
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_fifo_receive_request_attempt_id_replays_same_message() -> (
+    None
+):
+    simpleq = SimpleQ(transport=InMemoryTransport())
+    queue = simpleq.queue(
+        "attempts.fifo",
+        fifo=True,
+        wait_seconds=0,
+        content_based_deduplication=False,
+    )
+    await queue.ensure_exists()
+
+    for value in ("first", "second"):
+        await queue.enqueue(
+            Job(
+                task_name="tests.fixtures.tasks:record_sync",
+                args=(value,),
+                kwargs={},
+                queue_name=queue.name,
+            ),
+            message_group_id="group-1",
+            deduplication_id=f"dedup-{value}",
+        )
+
+    first_receive = await queue.receive(
+        max_messages=1,
+        wait_seconds=0,
+        receive_request_attempt_id="attempt-1",
+    )
+    second_receive = await queue.receive(
+        max_messages=1,
+        wait_seconds=0,
+        receive_request_attempt_id="attempt-1",
+    )
+
+    assert len(first_receive) == 1
+    assert len(second_receive) == 1
+    assert first_receive[0].job_id == second_receive[0].job_id
+    assert first_receive[0].receipt_handle == second_receive[0].receipt_handle
+
+    await queue.ack(first_receive[0])
+    next_message = await queue.receive(max_messages=1, wait_seconds=0)
+    assert [job.args[0] for job in next_message] == ["second"]
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_fifo_receive_request_attempt_id_cache_invalidated_after_ack() -> (
+    None
+):
+    simpleq = SimpleQ(transport=InMemoryTransport())
+    queue = simpleq.queue(
+        "attempts-ack.fifo",
+        fifo=True,
+        wait_seconds=0,
+        content_based_deduplication=False,
+    )
+    await queue.ensure_exists()
+
+    for value in ("first", "second"):
+        await queue.enqueue(
+            Job(
+                task_name="tests.fixtures.tasks:record_sync",
+                args=(value,),
+                kwargs={},
+                queue_name=queue.name,
+            ),
+            message_group_id="group-1",
+            deduplication_id=f"dedup-{value}",
+        )
+
+    first_receive = await queue.receive(
+        max_messages=1,
+        wait_seconds=0,
+        receive_request_attempt_id="attempt-1",
+    )
+    assert [job.args[0] for job in first_receive] == ["first"]
+
+    await queue.ack(first_receive[0])
+
+    replay_after_ack = await queue.receive(
+        max_messages=1,
+        wait_seconds=0,
+        receive_request_attempt_id="attempt-1",
+    )
+    assert [job.args[0] for job in replay_after_ack] == ["second"]

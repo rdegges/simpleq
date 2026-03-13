@@ -58,6 +58,9 @@ can use the current SQS `1 MiB` payload limit, and enqueue operations fail fast
 locally if a single message or batch exceeds that budget.
 The built-in `InMemoryTransport` also mirrors SQS long polling closely enough to
 wait for delayed messages that become visible during `receive(..., wait_seconds=...)`.
+For FIFO queues, `InMemoryTransport` also replays `receive_request_attempt_id`
+results within SQS's 5-minute retry window, so unit tests can validate
+idempotent receive retry behavior without AWS.
 `Queue.stats()` and the built-in dashboard also surface DLQ depth when DLQ
 support is enabled, so operators can spot backlogs without polling the dead
 letter queue separately.
