@@ -421,6 +421,23 @@ async def test_queue_delete_rejects_non_string_queue_url_from_transport() -> Non
 
 
 @pytest.mark.asyncio
+async def test_queue_delete_treats_missing_queue_errors_from_get_queue_url_as_noop() -> None:
+    class MissingQueueUrlTransport(FakeTransport):
+        async def get_queue_url(self, queue_name: str) -> str | None:
+            raise QueueNotFoundError(f"Queue '{queue_name}' is not defined.")
+
+    simpleq = SimpleQ()
+    transport = MissingQueueUrlTransport()
+    simpleq.transport = transport
+    queue = simpleq.queue("emails", wait_seconds=0)
+
+    await queue.delete()
+
+    assert transport.deleted == []
+    assert transport.ensured == []
+
+
+@pytest.mark.asyncio
 async def test_queue_stats_recovers_from_stale_queue_url() -> None:
     class FlakyStatsTransport(FakeTransport):
         def __init__(self) -> None:
