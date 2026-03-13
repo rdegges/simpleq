@@ -459,6 +459,16 @@ def test_from_overrides_normalizes_default_queue_name_whitespace(
     assert config.default_queue_name == "events.fifo"
 
 
+def test_from_overrides_ignores_blank_default_queue_name_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMPLEQ_DEFAULT_QUEUE", "   ")
+
+    config = SimpleQConfig.from_overrides()
+
+    assert config.default_queue_name == "default"
+
+
 @pytest.mark.parametrize("value", ["", "   "])
 def test_from_overrides_rejects_explicit_empty_default_queue_name(
     monkeypatch: pytest.MonkeyPatch,
@@ -473,7 +483,6 @@ def test_from_overrides_rejects_explicit_empty_default_queue_name(
 @pytest.mark.parametrize(
     "value",
     [
-        "   ",
         "bad queue name",
         "orders.fifo.extra",
     ],

@@ -330,9 +330,12 @@ class SimpleQConfig:
         if default_queue_name is not None:
             config.default_queue_name = default_queue_name
         else:
-            config.default_queue_name = (
-                os.getenv("SIMPLEQ_DEFAULT_QUEUE") or config.default_queue_name
-            )
+            env_default_queue_name = os.getenv("SIMPLEQ_DEFAULT_QUEUE")
+            if (
+                env_default_queue_name is not None
+                and env_default_queue_name.strip()
+            ):
+                config.default_queue_name = env_default_queue_name
         validate_config(config)
         return config
 

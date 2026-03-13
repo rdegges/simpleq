@@ -23,6 +23,9 @@ All notable changes to SimpleQ are documented in this file.
 - `SQSClient.ensure_queue()` now retries once with a refreshed queue URL when a
   cached URL goes stale during attribute/tag reconciliation, reducing flakiness
   after out-of-band queue deletion or recreation.
+- `SimpleQConfig.from_overrides()` now ignores whitespace-only
+  `SIMPLEQ_DEFAULT_QUEUE` values and falls back to `default`, preventing boot
+  failures from blank environment injection.
 
 ## [2.0.0] - 2026-03-13
 
