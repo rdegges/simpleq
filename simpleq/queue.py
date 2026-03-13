@@ -957,14 +957,18 @@ class Queue:
                     f"visibility_timeout must be between 0 and {_MAX_VISIBILITY_TIMEOUT}."
                 )
         if receive_request_attempt_id is not None:
-            receive_request_attempt_id = normalize_receive_request_attempt_id(
+            normalized_attempt_id = normalize_receive_request_attempt_id(
                 receive_request_attempt_id
             )
+            if normalized_attempt_id is None:
+                raise QueueValidationError(
+                    "receive_request_attempt_id must be a non-empty string."
+                )
             if not self.fifo:
                 raise QueueValidationError(
                     "receive_request_attempt_id is only supported for FIFO queues."
                 )
-            if len(receive_request_attempt_id) > _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH:
+            if len(normalized_attempt_id) > _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH:
                 raise QueueValidationError(
                     "receive_request_attempt_id must be 128 characters or fewer."
                 )

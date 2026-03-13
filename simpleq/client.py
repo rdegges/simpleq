@@ -205,14 +205,16 @@ class SimpleQ:
                 return queue_ref
             return self._clone_queue(queue_ref)
         if isinstance(queue_ref, str):
-            matches = self._configured_queues(queue_ref)
+            normalized_ref = queue_name_from_reference(queue_ref)
+            queue_name = normalized_ref if normalized_ref is not None else queue_ref
+            matches = self._configured_queues(queue_name)
             if len(matches) == 1:
                 return matches[0]
             if len(matches) > 1:
                 raise QueueValidationError(
-                    f"Queue name '{queue_ref}' is ambiguous. Reuse the Queue instance instead."
+                    f"Queue name '{queue_name}' is ambiguous. Reuse the Queue instance instead."
                 )
-            return self.queue(queue_ref, fifo=queue_ref.endswith(".fifo"))
+            return self.queue(queue_name, fifo=queue_name.endswith(".fifo"))
         raise QueueValidationError(
             "queue must be a Queue instance, queue name string, or None; "
             f"got {type(queue_ref).__name__}."
@@ -298,6 +300,8 @@ def queue_name_from_reference(reference: str) -> str | None:
     normalized = reference.strip()
     if not normalized:
         return None
+    if normalized.startswith("arn:"):
+        return _queue_name_from_arn(normalized)
     if "://" not in normalized:
         candidate = normalized.rstrip("/").rsplit("/", 1)[-1]
         return _validated_queue_name(candidate)
@@ -320,3 +324,14 @@ def _validated_queue_name(candidate: str) -> str | None:
         return normalize_queue_name(candidate, fifo=candidate.endswith(".fifo"))
     except QueueValidationError:
         return None
+
+
+def _queue_name_from_arn(arn: str) -> str | None:
+    """Extract an SQS queue name from a queue ARN."""
+    parts = arn.split(":", 5)
+    if len(parts) != 6:
+        return None
+    _arn, _partition, service, _region, _account_id, resource = parts
+    if service != "sqs":
+        return None
+    return _validated_queue_name(resource)

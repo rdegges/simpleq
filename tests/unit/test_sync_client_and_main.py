@@ -274,8 +274,12 @@ async def test_simpleq_list_queues_ignores_malformed_queue_urls(
             "https://sqs.us-east-1.amazonaws.com/123456789012/orders%2Efifo",
             "orders.fifo",
         ),
+        ("arn:aws:sqs:us-east-1:123456789012:emails", "emails"),
+        ("arn:aws-us-gov:sqs:us-gov-west-1:123456789012:orders.fifo", "orders.fifo"),
         ("simpleq-plain-name", "simpleq-plain-name"),
         ("https://sqs.aws/123/invalid name", None),
+        ("arn:aws:s3:us-east-1:123456789012:emails", None),
+        ("arn:aws:sqs:us-east-1:123456789012:", None),
         ("gopher://sqs.aws/123/simpleq-test-z", None),
         ("", None),
         ("   ", None),
@@ -286,6 +290,15 @@ def test_queue_name_from_reference_parses_and_validates(
     expected: str | None,
 ) -> None:
     assert queue_name_from_reference(reference) == expected
+
+
+def test_resolve_queue_accepts_sqs_arn_reference() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+
+    resolved = simpleq.resolve_queue("arn:aws:sqs:us-east-1:123456789012:emails")
+
+    assert resolved.name == "emails"
+    assert resolved.fifo is False
 
 
 def test_module_entrypoint_invokes_cli_main(monkeypatch: pytest.MonkeyPatch) -> None:
