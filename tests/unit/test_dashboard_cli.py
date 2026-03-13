@@ -76,7 +76,10 @@ def test_dashboard_render() -> None:
 
 
 def test_cli_queue_list(monkeypatch) -> None:
-    monkeypatch.setattr("simpleq.cli.make_client", lambda **_: FakeSimpleQ())
+    monkeypatch.setattr(
+        "simpleq.cli_commands.shared.make_client",
+        lambda **_: FakeSimpleQ(),
+    )
     result = runner.invoke(app, ["queue", "list", "--prefix", "em"])
     assert result.exit_code == 0
     assert json.loads(result.stdout.strip()) == ["emails"]

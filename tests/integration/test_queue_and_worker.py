@@ -746,7 +746,10 @@ async def test_cli_queue_flow(
 
     queue = simpleq_localstack.queue(unique_name("cli"), wait_seconds=0)
     cleanup_queues.append(queue)
-    monkeypatch.setattr("simpleq.cli.make_client", lambda **_: simpleq_localstack)
+    monkeypatch.setattr(
+        "simpleq.cli_commands.shared.make_client",
+        lambda **_: simpleq_localstack,
+    )
 
     runner = CliRunner()
     result = await asyncio.to_thread(
