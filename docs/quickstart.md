@@ -38,12 +38,17 @@ def send_email(payload: EmailPayload) -> None:
     print(payload.to)
 
 
-send_email.delay_sync(
-    to="user@example.com",
-    subject="Welcome",
-    body="Thanks for signing up.",
-)
-sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
+def main() -> None:
+    send_email.delay_sync(
+        to="user@example.com",
+        subject="Welcome",
+        body="Thanks for signing up.",
+    )
+    sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 If you run workers against a network path that can hang, pass

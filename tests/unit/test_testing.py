@@ -265,3 +265,142 @@ async def test_inmemory_transport_fifo_receive_request_attempt_id_cache_invalida
         receive_request_attempt_id="attempt-1",
     )
     assert [job.args[0] for job in replay_after_ack] == ["second"]
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_management_helpers() -> None:
+    transport = InMemoryTransport()
+    assert await transport.get_queue_url("emails") is None
+
+    queue_url = await transport.create_queue(
+        "emails",
+        attributes={"VisibilityTimeout": "5"},
+        tags={"env": "test"},
+    )
+    assert queue_url == "https://simpleq.test/emails"
+    assert await transport.get_queue_url("emails") == queue_url
+    assert (await transport.queue_arn("emails", queue_url)).endswith(":emails")
+
+    await transport.set_queue_attributes(
+        "emails",
+        queue_url,
+        {"DelaySeconds": "2"},
+    )
+    await transport.tag_queue("emails", queue_url, {"team": "backend"})
+    await transport.untag_queue("emails", queue_url, ["env"])
+    assert await transport.list_queue_tags("emails", queue_url) == {"team": "backend"}
+
+    await transport.send_message("emails", queue_url, message_body="visible")
+    await transport.send_message(
+        "emails",
+        queue_url,
+        message_body="delayed",
+        delay_seconds=60,
+    )
+    await transport.receive_messages(
+        "emails",
+        queue_url,
+        max_messages=1,
+        wait_seconds=0,
+        visibility_timeout=None,
+    )
+
+    attributes = await transport.get_queue_attributes(
+        "emails",
+        queue_url,
+        [
+            "ApproximateNumberOfMessages",
+            "ApproximateNumberOfMessagesDelayed",
+            "ApproximateNumberOfMessagesNotVisible",
+            "QueueArn",
+            "DelaySeconds",
+        ],
+    )
+    assert attributes["ApproximateNumberOfMessages"] == "0"
+    assert attributes["ApproximateNumberOfMessagesDelayed"] == "1"
+    assert attributes["ApproximateNumberOfMessagesNotVisible"] == "1"
+    assert attributes["DelaySeconds"] == "2"
+    assert attributes["QueueArn"].endswith(":emails")
+    assert await transport.list_queues(prefix="em") == [queue_url]
+
+    await transport.delete_queue("emails", queue_url)
+    assert await transport.get_queue_url("emails") is None
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_send_message_batch_and_change_visibility() -> None:
+    transport = InMemoryTransport()
+    queue_url = await transport.ensure_queue(
+        "emails",
+        attributes={"VisibilityTimeout": "30"},
+    )
+
+    message_ids = await transport.send_message_batch(
+        "emails",
+        queue_url,
+        [
+            {"MessageBody": "first"},
+            {
+                "MessageBody": "second",
+                "MessageAttributes": {
+                    "source": {"DataType": "String", "StringValue": "tests"}
+                },
+            },
+        ],
+    )
+    assert len(message_ids) == 2
+
+    first_batch = await transport.receive_messages(
+        "emails",
+        queue_url,
+        max_messages=1,
+        wait_seconds=0,
+        visibility_timeout=10,
+    )
+    await transport.change_message_visibility(
+        "emails",
+        queue_url,
+        first_batch[0]["ReceiptHandle"],
+        0,
+    )
+
+    second_batch = await transport.receive_messages(
+        "emails",
+        queue_url,
+        max_messages=2,
+        wait_seconds=0,
+        visibility_timeout=0,
+    )
+    assert len(second_batch) == 2
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_missing_queue_raises_keyerror() -> None:
+    transport = InMemoryTransport()
+
+    with pytest.raises(KeyError, match="Queue 'missing' is not defined."):
+        await transport.list_queue_tags("missing", "https://simpleq.test/missing")
+
+
+@pytest.mark.asyncio
+async def test_inmemory_transport_fifo_without_deduplication_keeps_duplicates() -> None:
+    transport = InMemoryTransport()
+    queue_url = await transport.ensure_queue(
+        "orders.fifo",
+        attributes={"FifoQueue": "true"},
+    )
+
+    first = await transport.send_message(
+        "orders.fifo",
+        queue_url,
+        message_body="same-body",
+        message_group_id="group-1",
+    )
+    second = await transport.send_message(
+        "orders.fifo",
+        queue_url,
+        message_body="same-body",
+        message_group_id="group-1",
+    )
+
+    assert first != second

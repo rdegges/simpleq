@@ -101,13 +101,17 @@ def send_email(payload: EmailPayload) -> None:
     print(f"Sending {payload.subject} to {payload.to}")
 
 
-if __name__ == "__main__":
+def main() -> None:
     send_email.delay_sync(
         to="user@example.com",
         subject="Hello",
         body="SimpleQ is ready.",
     )
-sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
+    sq.worker(queues=[queue], concurrency=1).work_sync(burst=True)
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 For production workers polling remote SQS endpoints, you can set
@@ -192,6 +196,7 @@ SimpleQ is not trying to replace every broker in every environment. It is optimi
 - [Deployment](docs/deployment.md)
 - [FIFO and DLQ cookbook](docs/fifo-dlq.md)
 - [Compatibility matrix](docs/compatibility.md)
+- [Stability and deprecation policy](docs/stability.md)
 - [Migrating from Celery](docs/migration-celery.md)
 - [Migrating from RQ](docs/migration-rq.md)
 

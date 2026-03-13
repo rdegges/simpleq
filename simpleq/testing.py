@@ -1,7 +1,10 @@
 """Testing helpers for SimpleQ.
 
 This module provides an in-memory transport that mimics the subset of SQS
-behavior needed for unit tests, examples, and local development helpers.
+behavior SimpleQ treats as part of its local development contract: queue
+creation, send/receive/ack flows, FIFO group blocking, FIFO deduplication,
+``ReceiveRequestAttemptId`` replay, visibility changes, and long polling for
+delayed messages.
 """
 
 from __future__ import annotations
@@ -354,7 +357,9 @@ class InMemoryTransport:
         return received
 
     @staticmethod
-    def _purge_expired_deduplication_entries(queue: _StoredQueue, *, now: float) -> None:
+    def _purge_expired_deduplication_entries(
+        queue: _StoredQueue, *, now: float
+    ) -> None:
         queue.deduplication_cache = {
             key: value
             for key, value in queue.deduplication_cache.items()
@@ -372,7 +377,9 @@ class InMemoryTransport:
         }
 
     @staticmethod
-    def _clone_received_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _clone_received_messages(
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         return [
             {
                 "Body": str(message["Body"]),

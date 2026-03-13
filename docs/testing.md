@@ -25,6 +25,26 @@ queue = sq.queue("emails")
 - `receive(..., wait_seconds=...)` now long-polls for delayed messages instead of
   returning early when a message becomes visible during the poll window
 
+The supported contract is encoded directly in the test suite:
+
+- [tests/unit/test_transport_contract.py](/Users/rdegges/Code/rdegges/simpleq/tests/unit/test_transport_contract.py)
+- [tests/integration/test_transport_contract_integration.py](/Users/rdegges/Code/rdegges/simpleq/tests/integration/test_transport_contract_integration.py)
+
+The cross-transport parity test covers the subset LocalStack reliably mirrors:
+FIFO ordering/blocking, deduplication, and delayed long-poll behavior. The
+`ReceiveRequestAttemptId` replay contract remains covered at the in-memory layer,
+because LocalStack does not currently emulate that FIFO retry behavior
+consistently.
+
+`InMemoryTransport` is intentionally not a full AWS emulator. It does not try to
+model:
+
+- IAM, credentials, or network failures
+- AWS-managed queue attributes outside the subset SimpleQ reads and writes
+- approximate CloudWatch/SQS counters beyond the local bookkeeping SimpleQ uses
+- distributed multi-process consumer races across multiple runtimes
+- service-generated AWS metadata that SimpleQ does not depend on directly
+
 Recommended targets:
 
 - task serialization and schema validation
