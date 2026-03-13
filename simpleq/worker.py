@@ -371,7 +371,23 @@ class Worker:
             )
             return
 
-        await queue.ack(job)
+        try:
+            await queue.ack(job)
+        except Exception as ack_exc:
+            queue_name = str(getattr(queue, "name", "unknown"))
+            self.simpleq.logger.error(
+                "queue_ack_failed",
+                queue_name=queue_name,
+                job_id=str(getattr(job, "job_id", "unknown")),
+                task_name=str(getattr(job, "task_name", "unknown")),
+                error=str(ack_exc),
+            )
+            self.simpleq.metrics.record_processed(
+                queue_name,
+                status="ack_error",
+                duration_seconds=0.0,
+            )
+            return
         self.simpleq.metrics.record_processed(
             queue.name,
             status="failure",

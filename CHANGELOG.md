@@ -51,6 +51,10 @@ All notable changes to SimpleQ are documented in this file.
 - `SQSClient.purge_queue()` now maps AWS `PurgeQueueInProgress` failures to a
   clear, actionable `QueueError`, making purge cooldown handling easier to
   diagnose in production and CI runs.
+- Worker non-retryable failure handling now treats `ack()` errors as explicit
+  `ack_error` outcomes (with actionable `queue_ack_failed` logs) instead of
+  generic `failure_handler_error`, improving production diagnostics and metric
+  accuracy.
 
 ## [2.0.0] - 2026-03-13
 
