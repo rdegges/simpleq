@@ -487,7 +487,10 @@ def _coerce_kwargs(kwargs: object) -> dict[str, object]:
     """Return deserialized task kwargs as a plain string-keyed mapping."""
     if not isinstance(kwargs, dict):
         raise ValueError("Task kwargs must deserialize to an object.")
-    return {str(key): value for key, value in kwargs.items()}
+    for key in kwargs:
+        if not isinstance(key, str):
+            raise ValueError("Task kwargs keys must be strings.")
+    return dict(kwargs)
 
 
 def effective_max_retries(

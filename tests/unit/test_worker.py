@@ -76,6 +76,11 @@ def test_reconstruct_arguments_for_schema() -> None:
     assert args[0].to == "a@example.com"
 
 
+def test_reconstruct_arguments_rejects_non_string_kwargs_keys() -> None:
+    with pytest.raises(ValueError, match="Task kwargs keys must be strings"):
+        reconstruct_arguments(None, (), {1: "invalid"})
+
+
 def test_worker_rejects_invalid_runtime_options() -> None:
     simpleq = SimpleQ()
     queue = FakeQueue(simpleq=simpleq)

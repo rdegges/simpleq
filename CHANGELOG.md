@@ -72,6 +72,9 @@ All notable changes to SimpleQ are documented in this file.
 - FIFO `receive_request_attempt_id` validation now rejects unsupported
   characters before making AWS calls, surfacing fast local validation errors
   instead of remote `ReceiveMessage` failures.
+- Worker argument reconstruction now rejects non-string deserialized `kwargs`
+  keys instead of coercing them, preventing malformed payloads from invoking
+  tasks with unexpected keyword names.
 
 ## [2.0.0] - 2026-03-13
 
