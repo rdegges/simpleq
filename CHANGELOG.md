@@ -66,6 +66,9 @@ All notable changes to SimpleQ are documented in this file.
   `Infinity`) for `poll_interval`, `receive_timeout_seconds`, and
   `graceful_shutdown_timeout`, preventing undefined timing behavior when
   workers are created directly in application code.
+- FIFO worker polling now attaches a per-receive
+  `ReceiveRequestAttemptId` automatically, reducing duplicate deliveries on
+  transient receive retries without requiring application-managed attempt IDs.
 
 ## [2.0.0] - 2026-03-13
 

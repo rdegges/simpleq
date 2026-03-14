@@ -74,6 +74,8 @@ values.
 When you need idempotent FIFO receive retries after transient network failures,
 pass `receive_request_attempt_id="..."` to `queue.receive(...)` to forward SQS
 `ReceiveRequestAttemptId`.
+SimpleQ workers now generate this automatically for FIFO queues on each poll,
+so long-running workers get idempotent receive retries by default.
 
 You can set `default_queue_name` (or `SIMPLEQ_DEFAULT_QUEUE`) to a queue name,
 queue URL, or SQS queue ARN. Example values: `jobs`, `jobs.fifo`,

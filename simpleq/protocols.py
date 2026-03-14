@@ -188,6 +188,7 @@ class QueueRuntimeProtocol(Protocol):
         *,
         max_messages: int,
         visibility_timeout: int,
+        receive_request_attempt_id: str | None = None,
     ) -> list[Job]: ...
 
     async def ack(self, job: Job) -> None: ...

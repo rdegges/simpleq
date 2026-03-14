@@ -29,6 +29,8 @@ Rules to remember:
   state in SQS
 - for idempotent FIFO receive retries, pass `receive_request_attempt_id` to
   `queue.receive(...)` so SQS can deduplicate retry attempts
+- `Worker` now auto-generates `receive_request_attempt_id` values for FIFO
+  polls, so idempotent receive retries are enabled by default in worker loops
 
 Example:
 

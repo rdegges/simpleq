@@ -1026,6 +1026,41 @@ async def test_worker_receive_uses_minimum_visibility_timeout_of_one_second() ->
 
 
 @pytest.mark.asyncio
+async def test_worker_receive_uses_fifo_receive_request_attempt_id() -> None:
+    simpleq = SimpleQ()
+
+    class FifoQueue(FakeQueue):
+        fifo: bool = True
+
+        def __init__(self, **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            self.received_attempt_ids: list[str] = []
+
+        async def receive(
+            self,
+            *,
+            max_messages: int,
+            visibility_timeout: int,
+            receive_request_attempt_id: str | None = None,
+        ) -> list[Job]:
+            assert max_messages
+            assert visibility_timeout == self.visibility_timeout
+            assert receive_request_attempt_id is not None
+            self.received_attempt_ids.append(receive_request_attempt_id)
+            return []
+
+    queue = FifoQueue(simpleq=simpleq)
+    worker = Worker(simpleq, [queue], concurrency=1)
+
+    await worker._receive(queue)
+    await worker._receive(queue)
+
+    assert len(queue.received_attempt_ids) == 2
+    assert all(queue.received_attempt_ids)
+    assert queue.received_attempt_ids[0] != queue.received_attempt_ids[1]
+
+
+@pytest.mark.asyncio
 async def test_worker_heartbeat_uses_minimum_visibility_timeout_of_one_second(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

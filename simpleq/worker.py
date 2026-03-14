@@ -8,6 +8,7 @@ import typing
 from math import isfinite
 from numbers import Real
 from typing import TYPE_CHECKING, cast
+from uuid import uuid4
 
 from simpleq._sync import run_sync
 from simpleq.observability import Timer
@@ -134,13 +135,25 @@ class Worker:
         try:
             timeout_seconds = self._receive_timeout(queue)
             visibility_timeout = self._visibility_timeout(queue)
-            jobs = await asyncio.wait_for(
-                queue.receive(
-                    max_messages=min(queue.batch_size, self.concurrency),
-                    visibility_timeout=visibility_timeout,
-                ),
-                timeout=timeout_seconds,
-            )
+            receive_request_attempt_id = self._receive_request_attempt_id(queue)
+            max_messages = min(queue.batch_size, self.concurrency)
+            if receive_request_attempt_id is None:
+                jobs = await asyncio.wait_for(
+                    queue.receive(
+                        max_messages=max_messages,
+                        visibility_timeout=visibility_timeout,
+                    ),
+                    timeout=timeout_seconds,
+                )
+            else:
+                jobs = await asyncio.wait_for(
+                    queue.receive(
+                        max_messages=max_messages,
+                        visibility_timeout=visibility_timeout,
+                        receive_request_attempt_id=receive_request_attempt_id,
+                    ),
+                    timeout=timeout_seconds,
+                )
             return queue, jobs
         except asyncio.TimeoutError:
             queue_name = str(getattr(queue, "name", "unknown"))
@@ -170,6 +183,11 @@ class Worker:
                 duration_seconds=0.0,
             )
             return queue, []
+
+    def _receive_request_attempt_id(self, queue: QueueRuntimeProtocol) -> str | None:
+        if not getattr(queue, "fifo", False):
+            return None
+        return uuid4().hex
 
     def _receive_timeout(self, queue: QueueRuntimeProtocol) -> float:
         if self.receive_timeout_seconds is not None:
