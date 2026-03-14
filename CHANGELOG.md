@@ -88,6 +88,9 @@ All notable changes to SimpleQ are documented in this file.
 - FIFO routing metadata fallback now ignores non-string
   `message_group_id`/`deduplication_id` values instead of coercing them,
   preventing unintended routing IDs from malformed payload metadata.
+- `SimpleQ.queue()` now accepts queue URLs and SQS queue ARNs (matching
+  `resolve_queue()` behavior), reducing friction when wiring queues directly
+  from infrastructure outputs.
 
 ## [2.0.0] - 2026-03-13
 

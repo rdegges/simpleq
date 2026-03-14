@@ -143,10 +143,24 @@ class SimpleQ:
         wait_seconds: int | None = None,
         tags: dict[str, str] | None = None,
     ) -> Queue:
-        """Create or return a cached queue object."""
+        """Create or return a cached queue object.
+
+        ``name`` may be a queue name, queue URL, or SQS queue ARN.
+        """
+        resolved_name = name
+        if isinstance(name, str):
+            normalized = name.strip()
+            normalized_ref = queue_name_from_reference(normalized)
+            if normalized_ref is None and _looks_like_queue_reference(normalized):
+                raise QueueValidationError(
+                    "queue string references must be a valid queue name, queue URL, "
+                    "or SQS queue ARN."
+                )
+            resolved_name = normalized_ref if normalized_ref is not None else normalized
+
         requested = Queue(
             cast("QueueAppProtocol", self),
-            name,
+            resolved_name,
             fifo=fifo,
             dlq=dlq,
             max_retries=max_retries,

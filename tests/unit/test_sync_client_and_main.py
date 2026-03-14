@@ -104,6 +104,27 @@ def test_simpleq_queue_uses_client_default_max_retries() -> None:
     assert simpleq.queue("emails").max_retries == 7
 
 
+def test_simpleq_queue_accepts_queue_url_reference() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+
+    from_url = simpleq.queue("https://sqs.us-east-1.amazonaws.com/123456789012/emails")
+    from_arn = simpleq.queue("arn:aws:sqs:us-east-1:123456789012:emails")
+
+    assert from_url.name == "emails"
+    assert from_arn is from_url
+    assert simpleq.queue("emails") is from_url
+
+
+def test_simpleq_queue_rejects_invalid_queue_reference() -> None:
+    simpleq = SimpleQ(transport=InMemoryTransport())
+
+    with pytest.raises(
+        QueueValidationError,
+        match="queue string references must be a valid queue name",
+    ):
+        simpleq.queue("https://sqs.us-east-1.amazonaws.com/123456789012/bad queue")
+
+
 def test_simpleq_queue_rejects_conflicting_redefinition() -> None:
     simpleq = SimpleQ(transport=InMemoryTransport())
     original = simpleq.queue(
