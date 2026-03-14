@@ -78,6 +78,10 @@ All notable changes to SimpleQ are documented in this file.
 - Job message-body deserialization now strictly validates `args` and `kwargs`
   shapes before constructing `Job` instances, preventing malformed payloads
   from being silently coerced into incorrect task arguments.
+- Job message-body deserialization now rejects non-string/blank core identifier
+  fields (`job_id`, `task_name`, `queue_name`, `serializer`) instead of
+  coercing arbitrary values, preventing malformed payloads from silently
+  turning into invalid task references.
 - Queue name normalization now trims leading/trailing whitespace and rejects
   non-string values with clear `QueueValidationError` messages, preventing
   accidental `TypeError` crashes from bad runtime input.

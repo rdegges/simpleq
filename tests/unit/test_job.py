@@ -165,6 +165,42 @@ def test_job_from_message_body_rejects_non_string_kwargs_keys() -> None:
         Job.from_message_body(message_body)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("task_name", 123),
+        ("task_name", "   "),
+        ("job_id", 123),
+        ("job_id", " "),
+        ("queue_name", 123),
+        ("queue_name", " "),
+        ("serializer", 123),
+        ("serializer", " "),
+    ],
+)
+def test_job_from_message_body_rejects_invalid_identifier_fields(
+    field: str,
+    value: object,
+) -> None:
+    payload = {
+        "version": "2.0",
+        "job_id": "abc",
+        "task_name": "tests.fixtures.tasks:record_sync",
+        "queue_name": "emails",
+        "serializer": "json",
+        "args": ["hello"],
+        "kwargs": {},
+        "attempt": 0,
+        "enqueued_at": "2026-03-07T00:00:00+00:00",
+        "metadata": {},
+    }
+    payload[field] = value
+    import json
+
+    with pytest.raises(TypeError, match=f"Job {field} must be a non-empty string"):
+        Job.from_message_body(json.dumps(payload))
+
+
 def test_job_from_sqs_message_tolerates_non_mapping_message_attributes() -> None:
     message = {
         "Body": Job(

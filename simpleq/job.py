@@ -21,6 +21,14 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _required_non_empty_string(payload: dict[str, Any], key: str) -> str:
+    """Return a required non-empty string field from a decoded payload."""
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise TypeError(f"Job {key} must be a non-empty string.")
+    return value
+
+
 @dataclass(slots=True)
 class Job:
     """Serializable representation of a queued task execution."""
@@ -71,7 +79,7 @@ class Job:
     ) -> Job:
         """Decode a job from an SQS message body."""
         payload = json.loads(message_body)
-        serializer_name = str(payload["serializer"])
+        serializer_name = _required_non_empty_string(payload, "serializer")
         serializer = get_serializer(serializer_name)
         metadata = payload.get("metadata", {})
         if not isinstance(metadata, dict):
@@ -85,9 +93,9 @@ class Job:
         if any(not isinstance(key, str) for key in raw_kwargs):
             raise TypeError("Job kwargs keys must be strings.")
         return cls(
-            job_id=str(payload["job_id"]),
-            task_name=str(payload["task_name"]),
-            queue_name=str(payload["queue_name"]),
+            job_id=_required_non_empty_string(payload, "job_id"),
+            task_name=_required_non_empty_string(payload, "task_name"),
+            queue_name=_required_non_empty_string(payload, "queue_name"),
             serializer=serializer_name,
             args=tuple(raw_args),
             kwargs=dict(raw_kwargs),
