@@ -62,6 +62,10 @@ All notable changes to SimpleQ are documented in this file.
 - Float config values now reject non-finite inputs (`NaN`, `Infinity`) for
   `poll_interval`, `receive_timeout_seconds`, and `sqs_price_per_million`,
   preventing unstable runtime behavior from malformed environment overrides.
+- Worker construction now rejects non-finite runtime overrides (`NaN`,
+  `Infinity`) for `poll_interval`, `receive_timeout_seconds`, and
+  `graceful_shutdown_timeout`, preventing undefined timing behavior when
+  workers are created directly in application code.
 
 ## [2.0.0] - 2026-03-13
 

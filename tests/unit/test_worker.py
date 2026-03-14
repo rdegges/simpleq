@@ -141,6 +141,67 @@ def test_worker_rejects_non_strict_numeric_runtime_types() -> None:
         )
 
 
+def test_worker_rejects_non_finite_runtime_options() -> None:
+    simpleq = SimpleQ()
+    queue = FakeQueue(simpleq=simpleq)
+
+    with pytest.raises(ValueError, match="poll_interval must be finite"):
+        Worker(
+            simpleq,
+            [queue],
+            concurrency=1,
+            poll_interval=float("nan"),
+        )
+
+    with pytest.raises(ValueError, match="poll_interval must be finite"):
+        Worker(
+            simpleq,
+            [queue],
+            concurrency=1,
+            poll_interval=float("inf"),
+        )
+
+    with pytest.raises(
+        ValueError, match="receive_timeout_seconds must be a finite number"
+    ):
+        Worker(
+            simpleq,
+            [queue],
+            concurrency=1,
+            receive_timeout_seconds=float("nan"),
+        )
+
+    with pytest.raises(
+        ValueError, match="receive_timeout_seconds must be a finite number"
+    ):
+        Worker(
+            simpleq,
+            [queue],
+            concurrency=1,
+            receive_timeout_seconds=float("inf"),
+        )
+
+    with pytest.raises(
+        ValueError, match="graceful_shutdown_timeout must be a finite number"
+    ):
+        Worker(
+            simpleq,
+            [queue],
+            concurrency=1,
+            graceful_shutdown_timeout=float("nan"),
+        )
+
+    with pytest.raises(
+        ValueError, match="graceful_shutdown_timeout must be a finite number"
+    ):
+        Worker(
+            simpleq,
+            [queue],
+            concurrency=1,
+            graceful_shutdown_timeout=float("inf"),
+        )
+
+
 @pytest.mark.asyncio
 async def test_worker_handles_retry_and_dlq() -> None:
     simpleq = SimpleQ()
@@ -464,6 +525,39 @@ async def test_worker_stop_sleep_sync_and_sync_invoke() -> None:
 
     with pytest.raises(ValueError):
         reconstruct_arguments(EmailPayload, (), {"bad": "shape"})
+
+
+@pytest.mark.asyncio
+async def test_worker_invoke_resolves_task_definition_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    simpleq = SimpleQ()
+    definition = TaskDefinition(name=task_name_for(record_sync), func=record_sync)
+    simpleq.registry.register(definition)
+    queue = FakeQueue(simpleq=simpleq)
+    worker = Worker(simpleq, [queue], concurrency=1)
+    job = Job(
+        task_name=definition.name,
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+    )
+    lookups = 0
+
+    def get_once(name: str) -> TaskDefinition:
+        nonlocal lookups
+        lookups += 1
+        if lookups > 1:
+            raise RuntimeError("registry.get called more than once")
+        assert name == definition.name
+        return definition
+
+    monkeypatch.setattr(simpleq.registry, "get", get_once)
+
+    result = await worker._invoke(queue, job)
+
+    assert result == "hello"
+    assert lookups == 1
 
 
 @pytest.mark.asyncio

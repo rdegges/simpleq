@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import random
 import typing
+from math import isfinite
 from numbers import Real
 from typing import TYPE_CHECKING, cast
 
@@ -43,18 +44,28 @@ class Worker:
             raise ValueError("concurrency must be at least 1.")
         if not _is_strict_real(poll_interval):
             raise ValueError("poll_interval must be a number.")
+        if not _is_finite_real(poll_interval):
+            raise ValueError("poll_interval must be finite.")
         if poll_interval < 0:
             raise ValueError("poll_interval must be non-negative.")
         if receive_timeout_seconds is not None and not _is_strict_real(
             receive_timeout_seconds
         ):
             raise ValueError("receive_timeout_seconds must be a number.")
+        if receive_timeout_seconds is not None and not _is_finite_real(
+            receive_timeout_seconds
+        ):
+            raise ValueError("receive_timeout_seconds must be a finite number.")
         if receive_timeout_seconds is not None and receive_timeout_seconds <= 0:
             raise ValueError("receive_timeout_seconds must be greater than 0.")
         if graceful_shutdown_timeout is not None and not _is_strict_real(
             graceful_shutdown_timeout
         ):
             raise ValueError("graceful_shutdown_timeout must be a number.")
+        if graceful_shutdown_timeout is not None and not _is_finite_real(
+            graceful_shutdown_timeout
+        ):
+            raise ValueError("graceful_shutdown_timeout must be a finite number.")
         if graceful_shutdown_timeout is not None and graceful_shutdown_timeout < 0:
             raise ValueError("graceful_shutdown_timeout must be non-negative.")
         self.simpleq = simpleq
@@ -485,3 +496,8 @@ def _is_strict_int(value: object) -> bool:
 def _is_strict_real(value: object) -> bool:
     """Return whether ``value`` is a real number but not a boolean."""
     return isinstance(value, Real) and not isinstance(value, bool)
+
+
+def _is_finite_real(value: float) -> bool:
+    """Return whether ``value`` is a finite real number."""
+    return isfinite(value)

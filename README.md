@@ -124,7 +124,8 @@ You can also tune `graceful_shutdown_timeout` per worker to control how long
 shutdown waits for in-flight jobs before they are cancelled.
 Worker runtime options are validated strictly: `concurrency` must be an
 integer, while `poll_interval`, `receive_timeout_seconds`, and
-`graceful_shutdown_timeout` must be numeric values (booleans are rejected).
+`graceful_shutdown_timeout` must be finite numeric values (booleans are
+rejected, and `NaN`/`Infinity` are invalid).
 Set `SIMPLEQ_POLL_INTERVAL` to tune the default worker poll cadence globally
 without changing application code.
 Set `SIMPLEQ_RECEIVE_TIMEOUT_SECONDS` to configure the default
