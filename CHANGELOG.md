@@ -85,6 +85,9 @@ All notable changes to SimpleQ are documented in this file.
 - Queue name normalization now trims leading/trailing whitespace and rejects
   non-string values with clear `QueueValidationError` messages, preventing
   accidental `TypeError` crashes from bad runtime input.
+- FIFO routing metadata fallback now ignores non-string
+  `message_group_id`/`deduplication_id` values instead of coercing them,
+  preventing unintended routing IDs from malformed payload metadata.
 
 ## [2.0.0] - 2026-03-13
 

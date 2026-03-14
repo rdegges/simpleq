@@ -1165,7 +1165,8 @@ def test_queue_string_metadata_and_validation(
             delay_seconds=-1, message_group_id=None, deduplication_id=None
         )
     assert string_metadata(None) is None
-    assert string_metadata(123) == "123"
+    assert string_metadata(123) is None
+    assert string_metadata("123") == "123"
 
 
 @pytest.mark.asyncio

@@ -568,6 +568,48 @@ async def test_enqueue_many_rejects_explicit_empty_fifo_ids_without_metadata_fal
         )
 
 
+@pytest.mark.asyncio
+async def test_enqueue_ignores_non_string_fifo_message_group_metadata() -> None:
+    queue = SimpleQ().queue("orders.fifo", fifo=True, content_based_deduplication=False)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+        metadata={
+            MESSAGE_GROUP_METADATA_KEY: 123,  # type: ignore[dict-item]
+            DEDUPLICATION_METADATA_KEY: "metadata-dedup",
+        },
+    )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="FIFO queues require a message_group_id",
+    ):
+        await queue.enqueue(job)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_ignores_non_string_fifo_deduplication_metadata() -> None:
+    queue = SimpleQ().queue("orders.fifo", fifo=True, content_based_deduplication=False)
+    job = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("hello",),
+        kwargs={},
+        queue_name=queue.name,
+        metadata={
+            MESSAGE_GROUP_METADATA_KEY: "metadata-group",
+            DEDUPLICATION_METADATA_KEY: 456,  # type: ignore[dict-item]
+        },
+    )
+
+    with pytest.raises(
+        QueueValidationError,
+        match="require a deduplication_id",
+    ):
+        await queue.enqueue(job)
+
+
 def test_is_missing_queue_error_accepts_transport_keyerror_shape() -> None:
     assert is_missing_queue_error(KeyError("Queue 'emails' is not defined."))
 

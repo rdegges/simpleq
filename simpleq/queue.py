@@ -1092,10 +1092,15 @@ def has_usable_receipt_handle(receipt_handle: str | None) -> bool:
 
 
 def string_metadata(value: object) -> str | None:
-    """Return a string metadata value or ``None``."""
-    if value is None:
+    """Return a string metadata value or ``None``.
+
+    Routing identifiers should only come from explicit string metadata values.
+    This avoids silently coercing unexpected types (for example ``123``) into
+    FIFO message group or deduplication IDs.
+    """
+    if not isinstance(value, str):
         return None
-    return str(value)
+    return value
 
 
 def routing_message_group_id(job: Job) -> str | None:
