@@ -19,6 +19,8 @@ from simpleq.queue import (
 def test_normalize_queue_name_validates_fifo_suffix() -> None:
     assert normalize_queue_name("emails", fifo=False) == "emails"
     assert normalize_queue_name("orders.fifo", fifo=True) == "orders.fifo"
+    assert normalize_queue_name("  payments  ", fifo=False) == "payments"
+    assert normalize_queue_name("  orders.fifo  ", fifo=True) == "orders.fifo"
     with pytest.raises(QueueValidationError):
         normalize_queue_name("emails", fifo=True)
     with pytest.raises(QueueValidationError):
@@ -38,6 +40,11 @@ def test_normalize_queue_name_validates_fifo_suffix() -> None:
 def test_normalize_queue_name_rejects_invalid_characters(name: str) -> None:
     with pytest.raises(QueueValidationError):
         normalize_queue_name(name, fifo=False)
+
+
+def test_normalize_queue_name_rejects_non_string_values() -> None:
+    with pytest.raises(QueueValidationError, match="must be a string"):
+        normalize_queue_name(123, fifo=False)  # type: ignore[arg-type]
 
 
 def test_normalize_queue_name_rejects_names_longer_than_80_characters() -> None:

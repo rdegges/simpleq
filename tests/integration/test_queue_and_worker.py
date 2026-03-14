@@ -39,6 +39,20 @@ async def test_standard_queue_round_trip(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_queue_name_whitespace_is_normalized_integration(
+    simpleq_localstack, unique_name, cleanup_queues
+) -> None:
+    raw_name = f"  {unique_name('trimmed')}  "
+    queue = simpleq_localstack.queue(raw_name)
+    cleanup_queues.append(queue)
+
+    await queue.ensure_exists()
+
+    assert queue.name == raw_name.strip()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_standard_queue_round_trip_with_aws_endpoint_env(
     localstack_endpoint: str,
     unique_name,

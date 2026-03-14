@@ -994,26 +994,29 @@ class Queue:
 
 def normalize_queue_name(name: str, *, fifo: bool) -> str:
     """Validate and normalize a queue name."""
-    if not name:
+    if not isinstance(name, str):
+        raise QueueValidationError("Queue name must be a string.")
+    normalized_name = name.strip()
+    if not normalized_name:
         raise QueueValidationError("Queue name must be non-empty.")
-    if len(name) > _MAX_QUEUE_NAME_LENGTH:
+    if len(normalized_name) > _MAX_QUEUE_NAME_LENGTH:
         raise QueueValidationError(
             f"Queue name must be <= {_MAX_QUEUE_NAME_LENGTH} characters."
         )
 
-    if fifo and not name.endswith(".fifo"):
+    if fifo and not normalized_name.endswith(".fifo"):
         raise QueueValidationError("FIFO queues must end with '.fifo'.")
-    if not fifo and name.endswith(".fifo"):
+    if not fifo and normalized_name.endswith(".fifo"):
         raise QueueValidationError("Standard queues must not end with '.fifo'.")
 
-    base_name = name.removesuffix(".fifo") if fifo else name
+    base_name = normalized_name.removesuffix(".fifo") if fifo else normalized_name
     if not base_name:
         raise QueueValidationError("Queue name must include characters before '.fifo'.")
     if not _QUEUE_NAME_PATTERN.fullmatch(base_name):
         raise QueueValidationError(
             "Queue names may only contain letters, numbers, hyphens, and underscores."
         )
-    return name
+    return normalized_name
 
 
 def validate_queue_tags(tags: dict[str, str] | None) -> dict[str, str]:
