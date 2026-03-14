@@ -150,6 +150,10 @@ def test_queue_rejects_non_integer_receive_options() -> None:
         ("", "receive_request_attempt_id must be a non-empty string"),
         ("   ", "receive_request_attempt_id must be a non-empty string"),
         ("x" * 129, "receive_request_attempt_id must be 128 characters or fewer"),
+        (
+            "attempt id",
+            "receive_request_attempt_id may only contain letters, numbers, and punctuation",
+        ),
     ],
 )
 def test_fifo_queue_validates_receive_request_attempt_id(

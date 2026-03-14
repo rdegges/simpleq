@@ -69,6 +69,9 @@ All notable changes to SimpleQ are documented in this file.
 - FIFO worker polling now attaches a per-receive
   `ReceiveRequestAttemptId` automatically, reducing duplicate deliveries on
   transient receive retries without requiring application-managed attempt IDs.
+- FIFO `receive_request_attempt_id` validation now rejects unsupported
+  characters before making AWS calls, surfacing fast local validation errors
+  instead of remote `ReceiveMessage` failures.
 
 ## [2.0.0] - 2026-03-13
 

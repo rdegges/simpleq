@@ -989,10 +989,7 @@ class Queue:
                 raise QueueValidationError(
                     "receive_request_attempt_id is only supported for FIFO queues."
                 )
-            if len(normalized_attempt_id) > _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH:
-                raise QueueValidationError(
-                    "receive_request_attempt_id must be 128 characters or fewer."
-                )
+            validate_receive_request_attempt_id(normalized_attempt_id)
 
 
 def normalize_queue_name(name: str, *, fifo: bool) -> str:
@@ -1070,6 +1067,20 @@ def normalize_receive_request_attempt_id(value: str | None) -> str | None:
             "receive_request_attempt_id must be a non-empty string."
         )
     return normalized
+
+
+def validate_receive_request_attempt_id(value: str | None) -> None:
+    """Validate a normalized FIFO receive request attempt ID."""
+    if value is None:
+        return
+    if len(value) > _MAX_RECEIVE_REQUEST_ATTEMPT_ID_LENGTH:
+        raise QueueValidationError(
+            "receive_request_attempt_id must be 128 characters or fewer."
+        )
+    if any(char not in _ALLOWED_FIFO_ROUTING_ID_CHARACTERS for char in value):
+        raise QueueValidationError(
+            "receive_request_attempt_id may only contain letters, numbers, and punctuation."
+        )
 
 
 def has_usable_receipt_handle(receipt_handle: str | None) -> bool:
