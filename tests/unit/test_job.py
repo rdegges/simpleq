@@ -113,6 +113,58 @@ def test_job_from_message_body_rejects_non_mapping_metadata() -> None:
         Job.from_message_body(json.dumps(payload))
 
 
+@pytest.mark.parametrize("invalid_args", ["abc", 123, {"k": "v"}])
+def test_job_from_message_body_rejects_non_sequence_args(invalid_args: object) -> None:
+    payload = {
+        "version": "2.0",
+        "job_id": "abc",
+        "task_name": "tests.fixtures.tasks:record_sync",
+        "queue_name": "emails",
+        "serializer": "json",
+        "args": invalid_args,
+        "kwargs": {},
+        "attempt": 0,
+        "enqueued_at": "2026-03-07T00:00:00+00:00",
+        "metadata": {},
+    }
+    import json
+
+    with pytest.raises(TypeError, match="Job args must deserialize to a sequence"):
+        Job.from_message_body(json.dumps(payload))
+
+
+def test_job_from_message_body_rejects_non_mapping_kwargs() -> None:
+    payload = {
+        "version": "2.0",
+        "job_id": "abc",
+        "task_name": "tests.fixtures.tasks:record_sync",
+        "queue_name": "emails",
+        "serializer": "json",
+        "args": ["hello"],
+        "kwargs": ["bad"],
+        "attempt": 0,
+        "enqueued_at": "2026-03-07T00:00:00+00:00",
+        "metadata": {},
+    }
+    import json
+
+    with pytest.raises(TypeError, match="Job kwargs must deserialize to a mapping"):
+        Job.from_message_body(json.dumps(payload))
+
+
+def test_job_from_message_body_rejects_non_string_kwargs_keys() -> None:
+    message_body = Job(
+        task_name="tests.fixtures.tasks:record_sync",
+        args=("hello",),
+        kwargs={1: "bad-key"},
+        queue_name="emails",
+        serializer="cloudpickle",
+    ).to_message_body()
+
+    with pytest.raises(TypeError, match="Job kwargs keys must be strings"):
+        Job.from_message_body(message_body)
+
+
 def test_job_from_sqs_message_tolerates_non_mapping_message_attributes() -> None:
     message = {
         "Body": Job(

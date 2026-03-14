@@ -75,6 +75,9 @@ All notable changes to SimpleQ are documented in this file.
 - Worker argument reconstruction now rejects non-string deserialized `kwargs`
   keys instead of coercing them, preventing malformed payloads from invoking
   tasks with unexpected keyword names.
+- Job message-body deserialization now strictly validates `args` and `kwargs`
+  shapes before constructing `Job` instances, preventing malformed payloads
+  from being silently coerced into incorrect task arguments.
 
 ## [2.0.0] - 2026-03-13
 

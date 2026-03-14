@@ -76,13 +76,21 @@ class Job:
         metadata = payload.get("metadata", {})
         if not isinstance(metadata, dict):
             raise TypeError("Job metadata must be a mapping.")
+        raw_args = serializer.load(payload["args"])
+        if not isinstance(raw_args, (list, tuple)):
+            raise TypeError("Job args must deserialize to a sequence.")
+        raw_kwargs = serializer.load(payload["kwargs"])
+        if not isinstance(raw_kwargs, dict):
+            raise TypeError("Job kwargs must deserialize to a mapping.")
+        if any(not isinstance(key, str) for key in raw_kwargs):
+            raise TypeError("Job kwargs keys must be strings.")
         return cls(
             job_id=str(payload["job_id"]),
             task_name=str(payload["task_name"]),
             queue_name=str(payload["queue_name"]),
             serializer=serializer_name,
-            args=tuple(serializer.load(payload["args"])),
-            kwargs=dict(serializer.load(payload["kwargs"])),
+            args=tuple(raw_args),
+            kwargs=dict(raw_kwargs),
             attempt=int(payload.get("attempt", 0)),
             enqueued_at=datetime.fromisoformat(str(payload["enqueued_at"])),
             metadata=metadata,
