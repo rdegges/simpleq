@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=70.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simpleq"
+version = "2.0.0"
+description = "The Python task queue for AWS. Dead simple. SQS native. Zero infrastructure."
+readme = "README.md"
+license = "ISC"
+requires-python = ">=3.10"
+authors = [
+    { name = "Randall Degges", email = "r@rdegges.com" },
+]
+keywords = ["sqs", "aws", "queue", "worker", "tasks", "background-jobs"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+]
+dependencies = [
+    "boto3>=1.35.0",
+    "pydantic>=2.10.0",
+    "structlog>=24.4.0",
+    "typer>=0.15.0",
+    "rich>=13.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+    "moto[sqs]>=5.0.0",
+    "mypy>=1.13.0",
+    "ruff>=0.8.0",
+    "boto3-stubs[sqs]>=1.35.0",
+]
+
+[project.scripts]
+simpleq = "simpleq.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/rdegges/simpleq"
+Repository = "https://github.com/rdegges/simpleq"
+Issues = "https://github.com/rdegges/simpleq/issues"
+
+[tool.setuptools.packages.find]
+include = ["simpleq*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+    "ARG",
+    "SIM",
+    "PERF",
+]
+ignore = [
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "S101"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
