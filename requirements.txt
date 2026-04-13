@@ -1,4 +1,4 @@
 boto==2.39.0
 py==1.10.0
-pytest==2.5.2
+pytest==9.0.3
 wsgiref==0.1.2
